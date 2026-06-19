@@ -562,7 +562,7 @@ onUnmounted(() => {
       </section>
     </section>
 
-    <section v-else class="login-page">
+    <section v-else-if="page === 'login'" class="login-page">
       <section class="page-title">
         <p class="eyebrow">Private studio</p>
         <h1>Gallery editor</h1>
