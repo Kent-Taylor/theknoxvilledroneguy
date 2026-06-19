@@ -71,7 +71,7 @@ img {
   gap: 24px;
   width: min(1220px, calc(100% - 32px));
   margin: 0 auto;
-  padding: 0 15px;
+  padding: 5px 10px;
   background: rgba(255, 253, 251, 0.9);
   border-bottom: 1px solid rgba(234, 221, 224, 0.7);
   backdrop-filter: blur(18px);
