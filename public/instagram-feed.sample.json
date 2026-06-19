@@ -1,0 +1,25 @@
+{
+  "data": [
+    {
+      "id": "sample-001",
+      "media_url": "/sample-instagram-aerial.png",
+      "permalink": "https://www.instagram.com/",
+      "caption": "Golden hour aerial sweep over East Tennessee property lines.",
+      "timestamp": "2026-04-21T14:30:00-06:00"
+    },
+    {
+      "id": "sample-002",
+      "media_url": "/sample-instagram-aerial.png",
+      "permalink": "https://www.instagram.com/",
+      "caption": "Downtown angles, clean movement, crisp commercial footage.",
+      "timestamp": "2026-04-18T09:15:00-06:00"
+    },
+    {
+      "id": "sample-003",
+      "media_url": "/sample-instagram-aerial.png",
+      "permalink": "https://www.instagram.com/",
+      "caption": "Scouting ridge views for a tourism promo flight plan.",
+      "timestamp": "2026-04-14T17:00:00-06:00"
+    }
+  ]
+}
