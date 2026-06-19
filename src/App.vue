@@ -72,6 +72,10 @@ const socialLinks = [
     url: 'https://www.facebook.com/profile.php?id=61559774199765',
   },
 ]
+const legalLinks = [
+  { name: 'Privacy Policy', path: '/privacy-policy' },
+  { name: 'Terms of Service', path: '/terms-of-service' },
+]
 
 const currentPath = ref(window.location.pathname)
 const galleryItems = ref([])
@@ -93,6 +97,14 @@ const page = computed(() => {
 
   if (currentPath.value === '/login') {
     return 'login'
+  }
+
+  if (currentPath.value === '/privacy-policy') {
+    return 'privacy'
+  }
+
+  if (currentPath.value === '/terms-of-service') {
+    return 'terms'
   }
 
   return 'home'
@@ -680,6 +692,88 @@ onUnmounted(() => {
         </section>
       </section>
     </section>
+
+    <section v-if="page === 'privacy'" class="legal-page">
+      <section class="page-title">
+        <p class="eyebrow">Website policy</p>
+        <h1>Privacy Policy</h1>
+        <p>How The Knoxville Drone Guy handles basic website and inquiry information.</p>
+      </section>
+
+      <article class="legal-content">
+        <h2>Information We Collect</h2>
+        <p>
+          When you contact The Knoxville Drone Guy, we may collect details you choose to provide,
+          such as your name, email address, phone number, project location, and project notes.
+        </p>
+
+        <h2>How We Use Information</h2>
+        <p>
+          We use submitted information to respond to inquiries, schedule work, provide quotes,
+          deliver media, maintain the website, and improve our services.
+        </p>
+
+        <h2>Gallery And Media</h2>
+        <p>
+          Public gallery media may include project videos, photos, and behind-the-scenes content
+          selected by The Knoxville Drone Guy. Admin access is restricted and uses Google login.
+        </p>
+
+        <h2>Third-Party Services</h2>
+        <p>
+          The site may use third-party services such as Google Drive, Google authentication, Railway,
+          and social media platforms. Those services are governed by their own privacy policies.
+        </p>
+
+        <h2>Contact</h2>
+        <p>
+          Questions about this policy can be sent to
+          <a href="mailto:theknoxvilledroneguy@gmail.com">theknoxvilledroneguy@gmail.com</a>.
+        </p>
+      </article>
+    </section>
+
+    <section v-if="page === 'terms'" class="legal-page">
+      <section class="page-title">
+        <p class="eyebrow">Website terms</p>
+        <h1>Terms of Service</h1>
+        <p>Basic terms for using The Knoxville Drone Guy website.</p>
+      </section>
+
+      <article class="legal-content">
+        <h2>Use Of This Site</h2>
+        <p>
+          By using this website, you agree to use it lawfully and avoid interfering with the site,
+          its media, or its server-side services.
+        </p>
+
+        <h2>Service Information</h2>
+        <p>
+          Website content is provided for general information about drone, ground video, photo,
+          mapping, inspection, and related media services. Project availability, pricing, and scope
+          are confirmed directly with The Knoxville Drone Guy.
+        </p>
+
+        <h2>Media Ownership</h2>
+        <p>
+          Photos, videos, branding, and gallery content on this website may not be copied,
+          republished, or reused without permission from The Knoxville Drone Guy or the applicable
+          rights holder.
+        </p>
+
+        <h2>External Links</h2>
+        <p>
+          Links to social media profiles or other third-party sites are provided for convenience.
+          The Knoxville Drone Guy is not responsible for external website content or policies.
+        </p>
+
+        <h2>Contact</h2>
+        <p>
+          Questions about these terms can be sent to
+          <a href="mailto:theknoxvilledroneguy@gmail.com">theknoxvilledroneguy@gmail.com</a>.
+        </p>
+      </article>
+    </section>
   </main>
 
   <footer class="site-footer">
@@ -714,5 +808,16 @@ onUnmounted(() => {
         <span>{{ social.name }}</span>
       </a>
     </nav>
+    <nav class="footer-legal-links" aria-label="Legal links">
+      <button
+        v-for="link in legalLinks"
+        :key="link.path"
+        type="button"
+        @click="navigate(link.path)"
+      >
+        {{ link.name }}
+      </button>
+    </nav>
+    <p class="copyright">© 2024 The Knoxville Drone Guy. All rights reserved.</p>
   </footer>
 </template>
