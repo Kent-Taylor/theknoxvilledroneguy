@@ -76,6 +76,7 @@ const socialLinks = [
 const currentPath = ref(window.location.pathname)
 const galleryItems = ref([])
 const adminItems = ref([])
+const visibleGalleryCount = ref(20)
 const galleryStatus = ref('Loading gallery...')
 const galleryError = ref('')
 const authStatus = ref({ loggedIn: false, user: null })
@@ -100,6 +101,9 @@ const page = computed(() => {
 const selectedAdminItem = computed(() =>
   adminItems.value.find((item) => item.id === selectedAdminItemId.value),
 )
+
+const visibleGalleryItems = computed(() => galleryItems.value.slice(0, visibleGalleryCount.value))
+const hasMoreGalleryItems = computed(() => visibleGalleryCount.value < galleryItems.value.length)
 
 function navigate(path) {
   window.history.pushState({}, '', path)
@@ -149,6 +153,7 @@ async function fetchJson(url, options = {}) {
 
 async function loadGallery() {
   galleryError.value = ''
+  visibleGalleryCount.value = 20
 
   try {
     galleryItems.value = await fetchJson('/api/gallery')
@@ -158,6 +163,33 @@ async function loadGallery() {
   } catch (error) {
     galleryError.value = 'The gallery could not load yet. Log in once so the server can access Drive.'
     galleryStatus.value = error.message
+  }
+}
+
+function loadMoreGalleryItems() {
+  if (!hasMoreGalleryItems.value) {
+    return
+  }
+
+  visibleGalleryCount.value = Math.min(visibleGalleryCount.value + 20, galleryItems.value.length)
+}
+
+function handleGalleryScroll() {
+  if (page.value !== 'gallery' || !hasMoreGalleryItems.value) {
+    return
+  }
+
+  const cards = Array.from(document.querySelectorAll('.instagram-card'))
+  const triggerCard = cards[Math.max(cards.length - 10, 0)]
+
+  if (!triggerCard) {
+    return
+  }
+
+  const triggerTop = triggerCard.getBoundingClientRect().top
+
+  if (triggerTop < window.innerHeight + 160) {
+    loadMoreGalleryItems()
   }
 }
 
@@ -324,12 +356,14 @@ function uploadThumbnail(item, event) {
 onMounted(() => {
   normalizeRoute()
   window.addEventListener('popstate', handlePopState)
+  window.addEventListener('scroll', handleGalleryScroll, { passive: true })
   loadGallery()
   loadAuthStatus().then(loadAdminGallery)
 })
 
 onUnmounted(() => {
   window.removeEventListener('popstate', handlePopState)
+  window.removeEventListener('scroll', handleGalleryScroll)
 })
 </script>
 
@@ -361,7 +395,7 @@ onUnmounted(() => {
           <p class="eyebrow">Drone & Ground photo, video, mapping, and inspections</p>
           <h1>The Knoxville Drone Guy</h1>
           <p class="hero-lede">
-            Helping Knoxville properties and brands stand out with professional drone video and photo.
+            Helping Knoxville businesses, properties and brands stand out with professional drone and ground videos and photos.
           </p>
 
           <div class="hero-actions">
@@ -416,7 +450,7 @@ onUnmounted(() => {
         <p class="eyebrow">Media Portfolio</p>
         <h1>Project Gallery</h1>
         <p>
-          A curated set of recent Knoxville Drone Guy videos, photos and behind the scenes
+          A curated set of recent Knoxville Drone Guy videos, photos and behind the scenes.
         </p>
       </section>
 
@@ -427,19 +461,26 @@ onUnmounted(() => {
       <p v-if="galleryError" class="feed-error">{{ galleryError }}</p>
 
       <section class="instagram-grid" aria-label="Google Drive project media">
-        <article v-for="item in galleryItems" :key="item.id" class="instagram-card">
+        <article v-for="item in visibleGalleryItems" :key="item.id" class="instagram-card">
           <button class="media-button" type="button" :style="getMediaStyle(item)" @click="openGalleryItem(item)">
             <img
               v-if="getThumbnail(item)"
               :src="getThumbnail(item)"
               :alt="`${item.title} project media`"
+              loading="lazy"
               @error="handleGalleryImageError"
             />
             <span v-else-if="isVideo(item)" class="media-placeholder">
               <span class="placeholder-title">{{ item.title }}</span>
               <span class="placeholder-hint">Video loads on play</span>
             </span>
-            <img v-else :src="item.media_url" :alt="`${item.title} project media`" @error="handleGalleryImageError" />
+            <img
+              v-else
+              :src="item.media_url"
+              :alt="`${item.title} project media`"
+              loading="lazy"
+              @error="handleGalleryImageError"
+            />
             <span v-if="isVideo(item)" class="play-icon" aria-hidden="true"></span>
             <span class="media-type">{{ item.media_type }}</span>
           </button>
@@ -449,6 +490,10 @@ onUnmounted(() => {
           </div>
         </article>
       </section>
+
+      <p v-if="hasMoreGalleryItems" class="gallery-load-more" aria-live="polite">
+        Loading more work...
+      </p>
 
       <section
         v-if="selectedGalleryItem"

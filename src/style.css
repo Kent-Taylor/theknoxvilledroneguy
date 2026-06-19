@@ -485,6 +485,10 @@ h3 {
   text-align: center;
 }
 
+.page-title h1 {
+  line-height: 1.04;
+}
+
 .feed-toolbar {
   display: flex;
   align-items: center;
@@ -711,6 +715,16 @@ h3 {
   background: rgba(216, 163, 41, 0.18);
   border: 1px solid rgba(216, 163, 41, 0.4);
   border-radius: 0;
+}
+
+.gallery-load-more {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-align: center;
+  text-transform: uppercase;
 }
 
 .integration-note h2 {
