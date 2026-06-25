@@ -6,7 +6,8 @@ import {
   syncGalleryItems,
   updateGalleryItem,
 } from './gallery-db.js'
-import { refreshGoogleToken, requireAdmin } from './google-auth.js'
+import { getDriveAccessToken } from './google-drive-service-account.js'
+import { requireAdmin } from './google-auth.js'
 
 const DRIVE_FILE_URL = 'https://www.googleapis.com/drive/v3/files'
 const DRIVE_LIST_FIELDS =
@@ -62,7 +63,7 @@ function normalizeDriveFile(file) {
 }
 
 async function fetchDriveFileMetadata(id, env = process.env) {
-  const accessToken = await refreshGoogleToken(env)
+  const accessToken = await getDriveAccessToken(env)
   const url = new URL(`${DRIVE_FILE_URL}/${id}`)
   url.searchParams.set('fields', 'id,parents')
 
@@ -100,7 +101,7 @@ async function getGalleryFolderId(env = process.env) {
 }
 
 async function fetchDriveFolderMedia(env = process.env) {
-  const accessToken = await refreshGoogleToken(env)
+  const accessToken = await getDriveAccessToken(env)
   const folderId = await getGalleryFolderId(env)
   const files = []
   let pageToken = ''
@@ -217,7 +218,7 @@ async function handleReorderGallery(req, res) {
 }
 
 async function fetchDriveFile(id, req, env = process.env) {
-  const accessToken = await refreshGoogleToken(env)
+  const accessToken = await getDriveAccessToken(env)
   const url = new URL(`${DRIVE_FILE_URL}/${id}`)
   url.searchParams.set('alt', 'media')
 
@@ -292,7 +293,7 @@ async function handleStreamThumbnail(req, res, id, env = process.env) {
   }
 
   try {
-    const accessToken = await refreshGoogleToken(env)
+    const accessToken = await getDriveAccessToken(env)
     const thumbnailResponse = await fetch(item.drive_thumbnail_url, {
       headers: { Authorization: `Bearer ${accessToken}` },
     })

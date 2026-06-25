@@ -72,7 +72,8 @@ These routes are server-side only:
 ## Google Drive Gallery Admin
 
 The public gallery route is `/gallery`, and it renders media from the site database and
-streams Google Drive files through the server. Visitors do not need a Google login.
+streams Google Drive files through the server. Visitors do not need a Google login, and the
+admin Google login does not request Drive access.
 
 Set these server-only values in `.env`:
 
@@ -81,15 +82,21 @@ GOOGLE_CLIENT_ID=your_google_oauth_client_id
 GOOGLE_CLIENT_SECRET=your_google_oauth_client_secret
 GOOGLE_REDIRECT_URI=http://127.0.0.1:5173/api/google/auth/callback
 GOOGLE_ADMIN_EMAIL=your_google_email@example.com
-GOOGLE_TOKEN_STORE_PATH=.google-drive-auth.json
+GOOGLE_SERVICE_ACCOUNT_EMAIL=your-service-account@your-project.iam.gserviceaccount.com
+GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
 GOOGLE_DRIVE_GALLERY_FOLDER_ID=your_google_drive_folder_id
 GALLERY_DB_PATH=data/gallery.sqlite
 ```
 
-Create a Google Cloud OAuth client and add the redirect URI above. Then visit `/login` manually and
-sign in with the Google account that can read the Drive files. The server stores the refresh token in
-`.google-drive-auth.json`, syncs the configured Drive folder on gallery load, stores gallery
-order/thumbnails in SQLite, and exposes:
+You can also set `GOOGLE_SERVICE_ACCOUNT_KEY_JSON` to the full service account JSON instead of
+using `GOOGLE_SERVICE_ACCOUNT_EMAIL` and `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`.
+
+Create a Google Cloud OAuth client and add the redirect URI above for admin identity only. Keep the
+OAuth scopes limited to `openid`, `email`, and `profile`; do not add Google Drive scopes.
+
+Create a Google service account, then share the configured Google Drive gallery folder with the
+service account email. The server uses that service account to sync the configured Drive folder on
+gallery load, stores gallery order/thumbnails in SQLite, and exposes:
 
 - `/api/gallery` — syncs the Google Drive folder and returns public ordered gallery JSON
 - `/api/gallery/media/:driveId` — public media stream proxied through the server

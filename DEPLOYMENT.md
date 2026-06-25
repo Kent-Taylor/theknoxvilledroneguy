@@ -16,23 +16,29 @@ and API routes. Deploy it to a Node-capable host connected to GitHub, not GitHub
 ```bash
 GOOGLE_CLIENT_ID=your_google_oauth_client_id
 GOOGLE_CLIENT_SECRET=your_google_oauth_client_secret
-GOOGLE_REDIRECT_URI=https://theknoxvilledroneguy.com/api/google/auth/callback
+GOOGLE_REDIRECT_URI=https://www.theknoxvilledroneguy.com/api/google/auth/callback
 GOOGLE_ADMIN_EMAIL=your_google_admin_email
-GOOGLE_TOKEN_STORE_PATH=/data/.google-drive-auth.json
+GOOGLE_SERVICE_ACCOUNT_EMAIL=your-service-account@your-project.iam.gserviceaccount.com
+GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY=your_multiline_private_key_with_escaped_newlines
 GOOGLE_DRIVE_GALLERY_FOLDER_ID=your_google_drive_folder_id
 GALLERY_DB_PATH=/data/gallery.sqlite
 ```
 
 Create a Railway volume and mount it at `/data`. Railway makes the mounted
-directory available to the running service, so these files survive redeploys.
+directory available to the running service, so the SQLite gallery database survives redeploys.
+
+Share the Google Drive gallery folder with the service account email before deploying.
 
 ## Google OAuth
 
 In Google Cloud, add this authorized redirect URI to the OAuth client:
 
 ```text
-https://theknoxvilledroneguy.com/api/google/auth/callback
+https://www.theknoxvilledroneguy.com/api/google/auth/callback
 ```
+
+Keep the OAuth scopes limited to `openid`, `email`, and `profile`. The gallery uses a service
+account for Drive reads, so the user OAuth app should not request Google Drive scopes.
 
 For local development, keep this redirect URI too:
 

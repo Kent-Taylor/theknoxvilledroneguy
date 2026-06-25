@@ -1,13 +1,9 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
-import { dirname, join } from 'node:path'
 import { createAdminSession, deleteAdminSession, getAdminSession } from './gallery-db.js'
 
-const TOKEN_STORE_PATH = join(process.cwd(), '.google-drive-auth.json')
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
 const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v2/userinfo'
-const DRIVE_READONLY_SCOPE = 'https://www.googleapis.com/auth/drive.readonly'
 const PROFILE_SCOPE = 'openid email profile'
 const stateStore = new Map()
 
@@ -17,33 +13,7 @@ function getGoogleConfig(env = process.env) {
     clientSecret: env.GOOGLE_CLIENT_SECRET || '',
     redirectUri: env.GOOGLE_REDIRECT_URI || '',
     allowedEmail: env.GOOGLE_ADMIN_EMAIL || '',
-    tokenStorePath: env.GOOGLE_TOKEN_STORE_PATH || TOKEN_STORE_PATH,
   }
-}
-
-function readGoogleTokens(env = process.env) {
-  const { tokenStorePath } = getGoogleConfig(env)
-
-  if (!existsSync(tokenStorePath)) {
-    return null
-  }
-
-  try {
-    return JSON.parse(readFileSync(tokenStorePath, 'utf8'))
-  } catch {
-    return null
-  }
-}
-
-function writeGoogleTokens(payload, env = process.env) {
-  const { tokenStorePath } = getGoogleConfig(env)
-  const tokenDir = dirname(tokenStorePath)
-
-  if (!existsSync(tokenDir)) {
-    mkdirSync(tokenDir, { recursive: true })
-  }
-
-  writeFileSync(tokenStorePath, JSON.stringify(payload, null, 2))
 }
 
 function createState() {
@@ -118,46 +88,6 @@ async function exchangeCodeForTokens(code, env = process.env) {
   return payload
 }
 
-async function refreshGoogleToken(env = process.env) {
-  const config = getGoogleConfig(env)
-  const stored = readGoogleTokens(env)
-
-  if (!stored?.refresh_token) {
-    throw new Error('No stored Google refresh token')
-  }
-
-  if (stored.expires_at && stored.expires_at > Date.now() + 60 * 1000) {
-    return stored.access_token
-  }
-
-  const response = await fetch(GOOGLE_TOKEN_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: config.clientId,
-      client_secret: config.clientSecret,
-      grant_type: 'refresh_token',
-      refresh_token: stored.refresh_token,
-    }),
-  })
-  const payload = await response.json().catch(() => ({}))
-
-  if (!response.ok) {
-    throw new Error(payload.error_description || payload.error || 'Google token refresh failed')
-  }
-
-  const nextTokens = {
-    ...stored,
-    ...payload,
-    refresh_token: payload.refresh_token || stored.refresh_token,
-    obtained_at: new Date().toISOString(),
-    expires_at: Date.now() + (payload.expires_in || 3600) * 1000,
-  }
-
-  writeGoogleTokens(nextTokens, env)
-  return nextTokens.access_token
-}
-
 async function getGoogleUser(accessToken) {
   const response = await fetch(GOOGLE_USERINFO_URL, {
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -186,9 +116,7 @@ async function handleGoogleAuthStart(req, res, env = process.env) {
   authUrl.searchParams.set('client_id', config.clientId)
   authUrl.searchParams.set('redirect_uri', config.redirectUri)
   authUrl.searchParams.set('response_type', 'code')
-  authUrl.searchParams.set('scope', `${PROFILE_SCOPE} ${DRIVE_READONLY_SCOPE}`)
-  authUrl.searchParams.set('access_type', 'offline')
-  authUrl.searchParams.set('prompt', 'consent')
+  authUrl.searchParams.set('scope', PROFILE_SCOPE)
   authUrl.searchParams.set('state', createState())
 
   redirect(res, authUrl.toString())
@@ -219,15 +147,6 @@ async function handleGoogleAuthCallback(req, res, env = process.env) {
       redirect(res, '/login?error=not_allowed')
       return
     }
-
-    const storedTokens = {
-      ...tokens,
-      refresh_token: tokens.refresh_token || readGoogleTokens(env)?.refresh_token || '',
-      email: user.email,
-      obtained_at: new Date().toISOString(),
-      expires_at: Date.now() + (tokens.expires_in || 3600) * 1000,
-    }
-    writeGoogleTokens(storedTokens, env)
 
     const sessionToken = randomBytes(32).toString('hex')
     createAdminSession({
@@ -278,7 +197,5 @@ export {
   handleGoogleAuthStart,
   handleGoogleAuthStatus,
   handleGoogleLogout,
-  readGoogleTokens,
-  refreshGoogleToken,
   requireAdmin,
 }

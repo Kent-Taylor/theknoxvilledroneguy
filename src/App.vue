@@ -173,7 +173,7 @@ async function loadGallery() {
       ? `${galleryItems.value.length} featured files`
       : 'No gallery files yet'
   } catch (error) {
-    galleryError.value = `The gallery could not load yet: ${error.message}. Log in once so the server can access Drive.`
+    galleryError.value = `The gallery could not load yet: ${error.message}. Check the Google service account and Drive folder sharing.`
     galleryStatus.value = error.message
   }
 }
@@ -567,16 +567,16 @@ onUnmounted(() => {
         <p class="eyebrow">Private studio</p>
         <h1>Gallery editor</h1>
         <p>
-          Sign in with Google to stream Drive media through the site, rearrange the gallery, and pick
-          custom video thumbnails.
+          Sign in with Google to manage the gallery, rearrange media, and pick custom video
+          thumbnails.
         </p>
       </section>
 
       <section v-if="!authStatus.loggedIn" class="integration-note">
         <h2>Google login required</h2>
         <p>
-          This connects your Google Drive to the server so public visitors can view the media without
-          being asked to sign into Google.
+          This confirms your admin identity. The public gallery media is read by the server through
+          a Google service account.
         </p>
         <div class="hero-actions">
           <a class="primary-action" href="/api/google/auth/start">Sign in with Google</a>
