@@ -173,7 +173,7 @@ async function loadGallery() {
       ? `${galleryItems.value.length} featured files`
       : 'No gallery files yet'
   } catch (error) {
-    galleryError.value = 'The gallery could not load yet. Log in once so the server can access Drive.'
+    galleryError.value = `The gallery could not load yet: ${error.message}. Log in once so the server can access Drive.`
     galleryStatus.value = error.message
   }
 }

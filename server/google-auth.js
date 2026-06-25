@@ -1,6 +1,6 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { createAdminSession, deleteAdminSession, getAdminSession } from './gallery-db.js'
 
 const TOKEN_STORE_PATH = join(process.cwd(), '.google-drive-auth.json')
@@ -37,6 +37,12 @@ function readGoogleTokens(env = process.env) {
 
 function writeGoogleTokens(payload, env = process.env) {
   const { tokenStorePath } = getGoogleConfig(env)
+  const tokenDir = dirname(tokenStorePath)
+
+  if (!existsSync(tokenDir)) {
+    mkdirSync(tokenDir, { recursive: true })
+  }
+
   writeFileSync(tokenStorePath, JSON.stringify(payload, null, 2))
 }
 
