@@ -82,21 +82,19 @@ GOOGLE_CLIENT_ID=your_google_oauth_client_id
 GOOGLE_CLIENT_SECRET=your_google_oauth_client_secret
 GOOGLE_REDIRECT_URI=http://127.0.0.1:5173/api/google/auth/callback
 GOOGLE_ADMIN_EMAIL=your_google_email@example.com
-GOOGLE_SERVICE_ACCOUNT_EMAIL=your-service-account@your-project.iam.gserviceaccount.com
-GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+GOOGLE_SERVICE_ACCOUNT_JSON={"type":"service_account","project_id":"...","private_key":"-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n","client_email":"drive-gallery@high-torch-428822-i7.iam.gserviceaccount.com"}
 GOOGLE_DRIVE_GALLERY_FOLDER_ID=your_google_drive_folder_id
 GALLERY_DB_PATH=data/gallery.sqlite
 ```
-
-You can also set `GOOGLE_SERVICE_ACCOUNT_KEY_JSON` to the full service account JSON instead of
-using `GOOGLE_SERVICE_ACCOUNT_EMAIL` and `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`.
 
 Create a Google Cloud OAuth client and add the redirect URI above for admin identity only. Keep the
 OAuth scopes limited to `openid`, `email`, and `profile`; do not add Google Drive scopes.
 
 Create a Google service account, then share the configured Google Drive gallery folder with the
-service account email. The server uses that service account to sync the configured Drive folder on
-gallery load, stores gallery order/thumbnails in SQLite, and exposes:
+service account email. For production, that email is
+`drive-gallery@high-torch-428822-i7.iam.gserviceaccount.com`. The server uses that service account
+to sync the configured Drive folder on gallery load, stores gallery order/thumbnails in SQLite, and
+exposes:
 
 - `/api/gallery` — syncs the Google Drive folder and returns public ordered gallery JSON
 - `/api/gallery/media/:driveId` — public media stream proxied through the server

@@ -6,10 +6,9 @@ import {
   syncGalleryItems,
   updateGalleryItem,
 } from './gallery-db.js'
-import { getDriveAccessToken } from './google-drive-service-account.js'
+import { getDriveAccessToken, getDriveClient } from './google-drive-service-account.js'
 import { requireAdmin } from './google-auth.js'
 
-const DRIVE_FILE_URL = 'https://www.googleapis.com/drive/v3/files'
 const DRIVE_LIST_FIELDS =
   'nextPageToken,files(id,name,mimeType,modifiedTime,createdTime,thumbnailLink,imageMediaMetadata(width,height),videoMediaMetadata(width,height,durationMillis))'
 
@@ -44,6 +43,24 @@ function expandDriveThumbnailLink(thumbnailLink = '') {
   return thumbnailLink.replace(/=s\d+$/, '=s1200')
 }
 
+function getGoogleDriveErrorMessage(error, fallback) {
+  const message = error?.response?.data?.error?.message || error?.message || fallback
+
+  if (error?.code === 404 || error?.response?.status === 404) {
+    return `${message}. Confirm GOOGLE_DRIVE_GALLERY_FOLDER_ID is correct and the folder is shared with the service account.`
+  }
+
+  if (error?.code === 403 || error?.response?.status === 403) {
+    return `${message}. Confirm the Drive folder is shared with the service account email.`
+  }
+
+  return message
+}
+
+function getResponseHeader(headers, name) {
+  return headers?.get?.(name) || headers?.[name] || headers?.[name.toLowerCase()] || ''
+}
+
 function normalizeDriveFile(file) {
   const mediaType = getDriveMediaType(file.mimeType)
   const mediaMetadata =
@@ -63,20 +80,18 @@ function normalizeDriveFile(file) {
 }
 
 async function fetchDriveFileMetadata(id, env = process.env) {
-  const accessToken = await getDriveAccessToken(env)
-  const url = new URL(`${DRIVE_FILE_URL}/${id}`)
-  url.searchParams.set('fields', 'id,parents')
+  try {
+    const drive = getDriveClient(env)
+    const response = await drive.files.get({
+      fileId: id,
+      fields: 'id,parents',
+      supportsAllDrives: true,
+    })
 
-  const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  })
-  const payload = await response.json().catch(() => ({}))
-
-  if (!response.ok) {
-    throw new Error(payload.error?.message || 'Unable to read Google Drive file metadata')
+    return response.data
+  } catch (error) {
+    throw new Error(getGoogleDriveErrorMessage(error, 'Unable to read Google Drive file metadata'))
   }
-
-  return payload
 }
 
 async function getGalleryFolderId(env = process.env) {
@@ -101,36 +116,28 @@ async function getGalleryFolderId(env = process.env) {
 }
 
 async function fetchDriveFolderMedia(env = process.env) {
-  const accessToken = await getDriveAccessToken(env)
   const folderId = await getGalleryFolderId(env)
   const files = []
   let pageToken = ''
+  const drive = getDriveClient(env)
 
   do {
-    const url = new URL(DRIVE_FILE_URL)
-    url.searchParams.set(
-      'q',
-      `'${folderId}' in parents and trashed = false and (mimeType contains 'image/' or mimeType contains 'video/')`,
-    )
-    url.searchParams.set('fields', DRIVE_LIST_FIELDS)
-    url.searchParams.set('pageSize', '100')
-    url.searchParams.set('orderBy', 'modifiedTime desc')
+    try {
+      const response = await drive.files.list({
+        q: `'${folderId}' in parents and trashed = false and (mimeType contains 'image/' or mimeType contains 'video/')`,
+        fields: DRIVE_LIST_FIELDS,
+        pageSize: 100,
+        orderBy: 'modifiedTime desc',
+        pageToken: pageToken || undefined,
+        includeItemsFromAllDrives: true,
+        supportsAllDrives: true,
+      })
 
-    if (pageToken) {
-      url.searchParams.set('pageToken', pageToken)
+      files.push(...(response.data.files || []).map(normalizeDriveFile).filter((file) => file.mediaType))
+      pageToken = response.data.nextPageToken || ''
+    } catch (error) {
+      throw new Error(getGoogleDriveErrorMessage(error, 'Unable to list Google Drive gallery folder'))
     }
-
-    const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    })
-    const payload = await response.json().catch(() => ({}))
-
-    if (!response.ok) {
-      throw new Error(payload.error?.message || 'Unable to list Google Drive gallery folder')
-    }
-
-    files.push(...(payload.files || []).map(normalizeDriveFile).filter((file) => file.mediaType))
-    pageToken = payload.nextPageToken || ''
   } while (pageToken)
 
   return files
@@ -218,19 +225,25 @@ async function handleReorderGallery(req, res) {
 }
 
 async function fetchDriveFile(id, req, env = process.env) {
-  const accessToken = await getDriveAccessToken(env)
-  const url = new URL(`${DRIVE_FILE_URL}/${id}`)
-  url.searchParams.set('alt', 'media')
-
-  const headers = {
-    Authorization: `Bearer ${accessToken}`,
-  }
+  const headers = {}
 
   if (req.headers.range) {
     headers.Range = req.headers.range
   }
 
-  return fetch(url, { headers })
+  const drive = getDriveClient(env)
+
+  return drive.files.get(
+    {
+      fileId: id,
+      alt: 'media',
+      supportsAllDrives: true,
+    },
+    {
+      headers,
+      responseType: 'stream',
+    },
+  )
 }
 
 async function handleStreamMedia(req, res, id, env = process.env) {
@@ -243,34 +256,34 @@ async function handleStreamMedia(req, res, id, env = process.env) {
 
   try {
     const driveResponse = await fetchDriveFile(id, req, env)
+    const status = driveResponse.status || 200
 
-    if (!driveResponse.ok && driveResponse.status !== 206) {
-      const message = await driveResponse.text().catch(() => '')
-      jsonResponse(res, driveResponse.status, {
+    if (status >= 400) {
+      jsonResponse(res, status, {
         error: 'Unable to stream Google Drive media',
-        message,
+        message: 'Google Drive returned an error while streaming media',
       })
       return
     }
 
     const headers = {
-      'Content-Type': item.mime_type || driveResponse.headers.get('content-type') || 'application/octet-stream',
-      'Accept-Ranges': driveResponse.headers.get('accept-ranges') || 'bytes',
+      'Content-Type': item.mime_type || getResponseHeader(driveResponse.headers, 'content-type') || 'application/octet-stream',
+      'Accept-Ranges': getResponseHeader(driveResponse.headers, 'accept-ranges') || 'bytes',
       'Cache-Control': 'public, max-age=3600',
     }
 
     for (const header of ['content-length', 'content-range']) {
-      const value = driveResponse.headers.get(header)
+      const value = getResponseHeader(driveResponse.headers, header)
 
       if (value) {
         headers[header.replace(/\b\w/g, (char) => char.toUpperCase())] = value
       }
     }
 
-    res.writeHead(driveResponse.status, headers)
+    res.writeHead(status, headers)
 
-    if (driveResponse.body) {
-      for await (const chunk of driveResponse.body) {
+    if (driveResponse.data) {
+      for await (const chunk of driveResponse.data) {
         res.write(chunk)
       }
     }
@@ -279,7 +292,7 @@ async function handleStreamMedia(req, res, id, env = process.env) {
   } catch (error) {
     jsonResponse(res, 503, {
       error: 'Google Drive media is not connected',
-      message: error.message,
+      message: getGoogleDriveErrorMessage(error, 'Unable to stream Google Drive media'),
     })
   }
 }
@@ -308,7 +321,7 @@ async function handleStreamThumbnail(req, res, id, env = process.env) {
     }
 
     res.writeHead(200, {
-      'Content-Type': thumbnailResponse.headers.get('content-type') || 'image/jpeg',
+      'Content-Type': getResponseHeader(thumbnailResponse.headers, 'content-type') || 'image/jpeg',
       'Cache-Control': 'public, max-age=3600',
     })
 

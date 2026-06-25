@@ -18,8 +18,7 @@ GOOGLE_CLIENT_ID=your_google_oauth_client_id
 GOOGLE_CLIENT_SECRET=your_google_oauth_client_secret
 GOOGLE_REDIRECT_URI=https://www.theknoxvilledroneguy.com/api/google/auth/callback
 GOOGLE_ADMIN_EMAIL=your_google_admin_email
-GOOGLE_SERVICE_ACCOUNT_EMAIL=your-service-account@your-project.iam.gserviceaccount.com
-GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY=your_multiline_private_key_with_escaped_newlines
+GOOGLE_SERVICE_ACCOUNT_JSON=your_full_service_account_json
 GOOGLE_DRIVE_GALLERY_FOLDER_ID=your_google_drive_folder_id
 GALLERY_DB_PATH=/data/gallery.sqlite
 ```
@@ -27,7 +26,8 @@ GALLERY_DB_PATH=/data/gallery.sqlite
 Create a Railway volume and mount it at `/data`. Railway makes the mounted
 directory available to the running service, so the SQLite gallery database survives redeploys.
 
-Share the Google Drive gallery folder with the service account email before deploying.
+Share the Google Drive gallery folder with the service account email before deploying:
+`drive-gallery@high-torch-428822-i7.iam.gserviceaccount.com`.
 
 ## Google OAuth
 
