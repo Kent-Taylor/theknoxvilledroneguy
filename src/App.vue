@@ -1,6 +1,6 @@
 <script setup>
 import { faFacebookF, faInstagram, faTiktok } from '@fortawesome/free-brands-svg-icons'
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import heroImage from './assets/knoxville-drone-hero.png'
 import logoImage from './assets/knoxville-drone-guy-logo.png'
 
@@ -93,6 +93,7 @@ const selectedGalleryItem = ref(null)
 const saveStatus = ref('')
 const careersStatus = ref('')
 const jobForm = ref({ id: null, title: '', description: '' })
+const jobEditor = ref(null)
 const selectedJob = ref(null)
 const applicationForm = ref({
   name: '',
@@ -106,6 +107,12 @@ const applicationForm = ref({
   resume_data_url: '',
 })
 const loadingMediaIds = ref(new Set())
+const richTextColors = [
+  { name: 'Gold', value: '#d9a321' },
+  { name: 'Ink', value: '#24191a' },
+  { name: 'Muted', value: '#8b7d80' },
+  { name: 'Green', value: '#24351f' },
+]
 
 const page = computed(() => {
   if (currentPath.value === '/gallery') {
@@ -279,6 +286,7 @@ async function loadJobs() {
 
 function resetJobForm() {
   jobForm.value = { id: null, title: '', description: '' }
+  setJobEditorHtml('')
 }
 
 function editJob(job) {
@@ -287,10 +295,34 @@ function editJob(job) {
     title: job.title,
     description: job.description,
   }
+  setJobEditorHtml(job.description)
+}
+
+function setJobEditorHtml(html = '') {
+  nextTick(() => {
+    if (jobEditor.value) {
+      jobEditor.value.innerHTML = html || ''
+    }
+  })
+}
+
+function syncJobDescription() {
+  jobForm.value.description = jobEditor.value?.innerHTML || ''
+}
+
+function formatJobDescription(command, value = null) {
+  jobEditor.value?.focus()
+  document.execCommand(command, false, value)
+  syncJobDescription()
+}
+
+function formatJobBlock(blockName) {
+  formatJobDescription('formatBlock', blockName)
 }
 
 async function saveJob() {
   careersStatus.value = 'Saving job...'
+  syncJobDescription()
 
   try {
     const isEditing = Boolean(jobForm.value.id)
@@ -590,6 +622,7 @@ onUnmounted(() => {
       <button :class="{ active: page === 'gallery' }" type="button" @click="navigate('/gallery')">
         Gallery
       </button>
+      <a v-if="authStatus.loggedIn" class="logout-link" href="/api/google/auth/logout">Log out</a>
     </nav>
   </header>
 
@@ -906,10 +939,36 @@ onUnmounted(() => {
             Position title
             <input v-model="jobForm.title" required />
           </label>
-          <label>
-            Description
-            <textarea v-model="jobForm.description" required rows="5"></textarea>
-          </label>
+          <div class="rich-editor-field">
+            <span>Description</span>
+            <div class="rich-editor-toolbar" aria-label="Job description formatting controls">
+              <button type="button" @click="formatJobDescription('bold')">B</button>
+              <button type="button" @click="formatJobDescription('italic')">I</button>
+              <button type="button" @click="formatJobDescription('insertUnorderedList')">Bullets</button>
+              <button type="button" @click="formatJobDescription('insertOrderedList')">Numbers</button>
+              <button type="button" @click="formatJobBlock('p')">Paragraph</button>
+              <button type="button" @click="formatJobBlock('h3')">Heading</button>
+              <button
+                v-for="color in richTextColors"
+                :key="color.value"
+                class="color-swatch"
+                type="button"
+                :style="{ '--swatch-color': color.value }"
+                :aria-label="`Set text color to ${color.name}`"
+                @click="formatJobDescription('foreColor', color.value)"
+              />
+            </div>
+            <div
+              ref="jobEditor"
+              class="rich-editor"
+              contenteditable="true"
+              role="textbox"
+              aria-multiline="true"
+              data-placeholder="Write the job details..."
+              @input="syncJobDescription"
+              @blur="syncJobDescription"
+            ></div>
+          </div>
           <div class="hero-actions">
             <button class="primary-action" type="submit">Save</button>
             <button class="secondary-action" type="button" @click="resetJobForm">Clear</button>
@@ -928,7 +987,7 @@ onUnmounted(() => {
           <div>
             <p class="eyebrow">Open position</p>
             <h2>{{ job.title }}</h2>
-            <p>{{ job.description }}</p>
+            <div class="job-description" v-html="job.description"></div>
           </div>
           <div class="job-actions">
             <button class="primary-action" type="button" @click="openApplication(job)">Apply</button>

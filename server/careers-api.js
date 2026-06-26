@@ -31,11 +31,84 @@ function cleanText(value) {
   return String(value || '').trim()
 }
 
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+function sanitizeColor(value) {
+  const color = cleanText(value).replace(/['"]/g, '')
+
+  if (/^#[0-9a-f]{3}([0-9a-f]{3})?$/i.test(color)) {
+    return color
+  }
+
+  if (/^rgb\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*\)$/i.test(color)) {
+    return color
+  }
+
+  return ''
+}
+
+function sanitizeRichText(value) {
+  const allowedTags = new Set(['p', 'br', 'strong', 'b', 'em', 'i', 'ul', 'ol', 'li', 'span', 'h3', 'h4'])
+  const rawHtml = String(value || '')
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+
+  return rawHtml
+    .replace(/<\s*(\/?)\s*font\b([^>]*)>/gi, (_, closing, attrs = '') => {
+      if (closing) {
+        return '</span>'
+      }
+
+      const color = sanitizeColor(attrs.match(/\bcolor\s*=\s*["']?([^"'\s>]+)/i)?.[1])
+      return color ? `<span style="color: ${color};">` : '<span>'
+    })
+    .replace(/<([^>]+)>/g, (match, tagBody) => {
+      const trimmed = tagBody.trim()
+      const closing = trimmed.startsWith('/')
+      const tagName = trimmed.replace(/^\//, '').split(/\s+/)[0].toLowerCase()
+
+      if (!allowedTags.has(tagName)) {
+        return escapeHtml(match)
+      }
+
+      if (closing) {
+        return tagName === 'br' ? '' : `</${tagName}>`
+      }
+
+      if (tagName === 'br') {
+        return '<br>'
+      }
+
+      if (tagName === 'span') {
+        const color = sanitizeColor(trimmed.match(/\bcolor\s*:\s*([^;"']+)/i)?.[1])
+        return color ? `<span style="color: ${color};">` : '<span>'
+      }
+
+      return `<${tagName}>`
+    })
+    .trim()
+}
+
+function getPlainTextFromHtml(value) {
+  return String(value || '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 function validateJobPayload(body) {
   const title = cleanText(body.title)
-  const description = cleanText(body.description)
+  const description = sanitizeRichText(body.description)
 
-  if (!title || !description) {
+  if (!title || !getPlainTextFromHtml(description)) {
     throw new Error('Job title and description are required')
   }
 
