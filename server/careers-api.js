@@ -54,7 +54,22 @@ function sanitizeColor(value) {
 }
 
 function sanitizeRichText(value) {
-  const allowedTags = new Set(['p', 'br', 'strong', 'b', 'em', 'i', 'ul', 'ol', 'li', 'span', 'h3', 'h4'])
+  const allowedTags = new Set([
+    'p',
+    'br',
+    'strong',
+    'b',
+    'em',
+    'i',
+    'ul',
+    'ol',
+    'li',
+    'span',
+    'h1',
+    'h2',
+    'h3',
+    'h4',
+  ])
   const rawHtml = String(value || '')
     .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
     .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
@@ -94,6 +109,41 @@ function sanitizeRichText(value) {
       return `<${tagName}>`
     })
     .trim()
+}
+
+function decodeAllowedEscapedTags(value) {
+  return String(value || '').replace(
+    /&lt;\s*(\/?)\s*(h1|h2|h3|h4|p|br|strong|b|em|i|ul|ol|li|span)\b([^&]*)&gt;/gi,
+    (_, closing, tagName, attrs = '') => {
+      const tag = tagName.toLowerCase()
+
+      if (closing) {
+        return tag === 'br' ? '' : `</${tag}>`
+      }
+
+      if (tag === 'br') {
+        return '<br>'
+      }
+
+      if (tag === 'span') {
+        const color = sanitizeColor(
+          attrs
+            .replace(/&quot;/g, '"')
+            .match(/\bcolor\s*:\s*([^;"']+)/i)?.[1],
+        )
+        return color ? `<span style="color: ${color};">` : '<span>'
+      }
+
+      return `<${tag}>`
+    },
+  )
+}
+
+function normalizeJob(job) {
+  return {
+    ...job,
+    description: sanitizeRichText(decodeAllowedEscapedTags(job.description)),
+  }
 }
 
 function getPlainTextFromHtml(value) {
@@ -161,7 +211,7 @@ async function handleCareersApi(req, res) {
   const path = url.pathname
 
   if (req.method === 'GET' && path === '/api/jobs') {
-    jsonResponse(res, 200, getJobs())
+    jsonResponse(res, 200, getJobs().map(normalizeJob))
     return true
   }
 
@@ -180,7 +230,7 @@ async function handleCareersApi(req, res) {
     }
 
     try {
-      jsonResponse(res, 201, createJob(validateJobPayload(await readJsonBody(req))))
+      jsonResponse(res, 201, normalizeJob(createJob(validateJobPayload(await readJsonBody(req)))))
     } catch (error) {
       jsonResponse(res, 400, { error: 'Unable to create job', message: error.message })
     }
@@ -203,7 +253,7 @@ async function handleCareersApi(req, res) {
         return true
       }
 
-      jsonResponse(res, 200, updated)
+      jsonResponse(res, 200, normalizeJob(updated))
     } catch (error) {
       jsonResponse(res, 400, { error: 'Unable to update job', message: error.message })
     }

@@ -974,12 +974,19 @@ h3 {
 
 .rich-editor h3,
 .rich-editor h4,
+.job-description h1,
+.job-description h2,
 .job-description h3,
 .job-description h4 {
   margin: 1em 0 0.4em;
   color: var(--black);
   font-family: 'Playfair Display', Georgia, serif;
   line-height: 1.12;
+}
+
+.job-description h1,
+.job-description h2 {
+  font-size: clamp(1.4rem, 2.4vw, 2rem);
 }
 
 .job-description {
