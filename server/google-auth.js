@@ -66,6 +66,14 @@ function redirect(res, location) {
   res.end()
 }
 
+function getSessionCookie(token, req) {
+  const forwardedProto = req.headers['x-forwarded-proto'] || ''
+  const isSecure = forwardedProto.includes('https') || req.headers.host?.includes('theknoxvilledroneguy.com')
+  const secureFlag = isSecure ? '; Secure' : ''
+
+  return `kgd_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${7 * 24 * 60 * 60}${secureFlag}`
+}
+
 async function exchangeCodeForTokens(code, env = process.env) {
   const config = getGoogleConfig(env)
   const response = await fetch(GOOGLE_TOKEN_URL, {
@@ -159,7 +167,7 @@ async function handleGoogleAuthCallback(req, res, env = process.env) {
 
     res.writeHead(302, {
       Location: '/login',
-      'Set-Cookie': `kgd_session=${sessionToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${7 * 24 * 60 * 60}`,
+      'Set-Cookie': getSessionCookie(sessionToken, req),
     })
     res.end()
   } catch (authError) {

@@ -73,6 +73,7 @@ const socialLinks = [
   },
 ]
 const legalLinks = [
+  { name: 'Work With Us', path: '/careers' },
   { name: 'Privacy Policy', path: '/privacy-policy' },
   { name: 'Terms of Service', path: '/terms-of-service' },
 ]
@@ -80,6 +81,8 @@ const legalLinks = [
 const currentPath = ref(window.location.pathname)
 const galleryItems = ref([])
 const adminItems = ref([])
+const jobs = ref([])
+const jobApplications = ref([])
 const visibleGalleryCount = ref(20)
 const galleryStatus = ref('Loading gallery...')
 const galleryError = ref('')
@@ -88,6 +91,20 @@ const draggedItemId = ref('')
 const selectedAdminItemId = ref('')
 const selectedGalleryItem = ref(null)
 const saveStatus = ref('')
+const careersStatus = ref('')
+const jobForm = ref({ id: null, title: '', description: '' })
+const selectedJob = ref(null)
+const applicationForm = ref({
+  name: '',
+  age: '',
+  city: '',
+  state: '',
+  instagram: '',
+  tiktok: '',
+  resume_name: '',
+  resume_type: '',
+  resume_data_url: '',
+})
 const loadingMediaIds = ref(new Set())
 
 const page = computed(() => {
@@ -97,6 +114,10 @@ const page = computed(() => {
 
   if (currentPath.value === '/login') {
     return 'login'
+  }
+
+  if (currentPath.value === '/careers') {
+    return 'careers'
   }
 
   if (currentPath.value === '/privacy-policy') {
@@ -217,10 +238,161 @@ async function loadAdminGallery() {
     return
   }
 
-  adminItems.value = await fetchJson('/api/gallery/admin')
+  adminItems.value = await fetchJson('/api/gallery/admin').catch((error) => {
+    saveStatus.value = error.message
+    return []
+  })
+  jobApplications.value = await fetchJson('/api/jobs/applications').catch((error) => {
+    careersStatus.value = error.message
+    return []
+  })
 
   if (!selectedAdminItemId.value && adminItems.value.length) {
     selectedAdminItemId.value = adminItems.value[0].id
+  }
+}
+
+async function loadJobs() {
+  jobs.value = await fetchJson('/api/jobs').catch(() => [])
+}
+
+function resetJobForm() {
+  jobForm.value = { id: null, title: '', description: '' }
+}
+
+function editJob(job) {
+  jobForm.value = {
+    id: job.id,
+    title: job.title,
+    description: job.description,
+  }
+}
+
+async function saveJob() {
+  careersStatus.value = 'Saving job...'
+
+  try {
+    const isEditing = Boolean(jobForm.value.id)
+    const saved = await fetchJson(isEditing ? `/api/jobs/${jobForm.value.id}` : '/api/jobs', {
+      method: isEditing ? 'PATCH' : 'POST',
+      body: JSON.stringify({
+        title: jobForm.value.title,
+        description: jobForm.value.description,
+      }),
+    })
+
+    if (isEditing) {
+      jobs.value = jobs.value.map((job) => (job.id === saved.id ? saved : job))
+    } else {
+      jobs.value = [saved, ...jobs.value]
+    }
+
+    careersStatus.value = 'Job saved'
+    resetJobForm()
+  } catch (error) {
+    careersStatus.value = error.message
+  }
+}
+
+async function removeJob(job) {
+  careersStatus.value = 'Deleting job...'
+
+  try {
+    await fetchJson(`/api/jobs/${job.id}`, { method: 'DELETE' })
+    jobs.value = jobs.value.filter((entry) => entry.id !== job.id)
+    careersStatus.value = 'Job deleted'
+
+    if (jobForm.value.id === job.id) {
+      resetJobForm()
+    }
+  } catch (error) {
+    careersStatus.value = error.message
+  }
+}
+
+function resetApplicationForm() {
+  applicationForm.value = {
+    name: '',
+    age: '',
+    city: '',
+    state: '',
+    instagram: '',
+    tiktok: '',
+    resume_name: '',
+    resume_type: '',
+    resume_data_url: '',
+  }
+}
+
+function openApplication(job) {
+  selectedJob.value = job
+  careersStatus.value = ''
+  resetApplicationForm()
+}
+
+function closeApplication() {
+  selectedJob.value = null
+  resetApplicationForm()
+}
+
+function handleResumeUpload(event) {
+  const [file] = event.target.files || []
+
+  if (!file) {
+    return
+  }
+
+  const acceptedTypes = new Set(['application/pdf', 'image/png', 'image/jpeg'])
+
+  if (!acceptedTypes.has(file.type)) {
+    careersStatus.value = 'Resume must be a PDF, PNG, JPG, or JPEG file'
+    event.target.value = ''
+    return
+  }
+
+  const reader = new FileReader()
+  reader.onload = () => {
+    applicationForm.value = {
+      ...applicationForm.value,
+      resume_name: file.name,
+      resume_type: file.type,
+      resume_data_url: reader.result,
+    }
+  }
+  reader.readAsDataURL(file)
+}
+
+function normalizeExternalUrl(value) {
+  const trimmed = String(value || '').trim()
+
+  if (!trimmed) {
+    return ''
+  }
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed
+  }
+
+  return `https://${trimmed.replace(/^@/, '')}`
+}
+
+async function submitApplication() {
+  if (!selectedJob.value) {
+    return
+  }
+
+  careersStatus.value = 'Submitting application...'
+
+  try {
+    await fetchJson(`/api/jobs/${selectedJob.value.id}/apply`, {
+      method: 'POST',
+      body: JSON.stringify(applicationForm.value),
+    })
+    careersStatus.value = 'Application submitted'
+    await loadAdminGallery()
+    closeApplication()
+  } catch (error) {
+    careersStatus.value = error.message
   }
 }
 
@@ -370,6 +542,7 @@ onMounted(() => {
   window.addEventListener('popstate', handlePopState)
   window.addEventListener('scroll', handleGalleryScroll, { passive: true })
   loadGallery()
+  loadJobs()
   loadAuthStatus().then(loadAdminGallery)
 })
 
@@ -690,6 +863,160 @@ onUnmounted(() => {
             </label>
           </div>
         </section>
+      </section>
+    </section>
+
+    <section v-if="page === 'careers'" class="careers-page">
+      <section class="page-title">
+        <p class="eyebrow">Work With Us</p>
+        <h1>Careers</h1>
+        <p>Join The Knoxville Drone Guy on shoots, edits, creative projects, and local media work.</p>
+      </section>
+
+      <section v-if="authStatus.loggedIn" class="job-admin-panel">
+        <div>
+          <p class="eyebrow">Admin</p>
+          <h2>{{ jobForm.id ? 'Edit job post' : 'Add a job post' }}</h2>
+          <p>{{ careersStatus || 'Create openings that applicants can apply for from this page.' }}</p>
+        </div>
+        <form class="job-form" @submit.prevent="saveJob">
+          <label>
+            Position title
+            <input v-model="jobForm.title" required />
+          </label>
+          <label>
+            Description
+            <textarea v-model="jobForm.description" required rows="5"></textarea>
+          </label>
+          <div class="hero-actions">
+            <button class="primary-action" type="submit">Save</button>
+            <button class="secondary-action" type="button" @click="resetJobForm">Clear</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="jobs-list" aria-label="Open jobs">
+        <article v-if="!jobs.length" class="job-card">
+          <p class="eyebrow">No openings yet</p>
+          <h2>Check back soon.</h2>
+          <p>New opportunities will show up here when they are available.</p>
+        </article>
+
+        <article v-for="job in jobs" :key="job.id" class="job-card">
+          <div>
+            <p class="eyebrow">Open position</p>
+            <h2>{{ job.title }}</h2>
+            <p>{{ job.description }}</p>
+          </div>
+          <div class="job-actions">
+            <button class="primary-action" type="button" @click="openApplication(job)">Apply</button>
+            <template v-if="authStatus.loggedIn">
+              <button class="secondary-action" type="button" @click="editJob(job)">Edit</button>
+              <button class="secondary-action" type="button" @click="removeJob(job)">Delete</button>
+            </template>
+          </div>
+        </article>
+      </section>
+
+      <section v-if="authStatus.loggedIn && jobApplications.length" class="applications-panel">
+        <div class="section-heading compact-heading">
+          <h2>Recent applications</h2>
+          <p class="eyebrow">Admin review</p>
+        </div>
+        <article v-for="application in jobApplications" :key="application.id" class="application-card">
+          <div>
+            <p class="eyebrow">{{ application.job_title }}</p>
+            <h3>{{ application.name }}</h3>
+            <p>{{ application.age }} · {{ application.city }}, {{ application.state }}</p>
+            <p v-if="application.instagram || application.tiktok" class="application-socials">
+              <a
+                v-if="application.instagram"
+                :href="normalizeExternalUrl(application.instagram)"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Instagram
+              </a>
+              <a
+                v-if="application.tiktok"
+                :href="normalizeExternalUrl(application.tiktok)"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                TikTok
+              </a>
+            </p>
+          </div>
+          <a
+            class="secondary-action compact"
+            :href="application.resume_data_url"
+            :download="application.resume_name"
+          >
+            Resume
+          </a>
+        </article>
+      </section>
+
+      <section
+        v-if="selectedJob"
+        class="media-viewer"
+        role="dialog"
+        aria-modal="true"
+        :aria-label="`Apply for ${selectedJob.title}`"
+        @click.self="closeApplication"
+      >
+        <form class="application-panel" @submit.prevent="submitApplication">
+          <div class="media-viewer-header">
+            <div>
+              <strong>Apply for {{ selectedJob.title }}</strong>
+              <span>{{ careersStatus || 'Tell us a little about you.' }}</span>
+            </div>
+            <button class="secondary-action compact" type="button" @click="closeApplication">
+              Close
+            </button>
+          </div>
+
+          <div class="application-fields">
+            <label>
+              Name
+              <input v-model="applicationForm.name" required />
+            </label>
+            <label>
+              Age
+              <input v-model="applicationForm.age" required inputmode="numeric" />
+            </label>
+            <label>
+              City
+              <input v-model="applicationForm.city" required />
+            </label>
+            <label>
+              State
+              <input v-model="applicationForm.state" required />
+            </label>
+            <label>
+              Instagram
+              <input v-model="applicationForm.instagram" placeholder="@username or profile link" />
+            </label>
+            <label>
+              TikTok
+              <input v-model="applicationForm.tiktok" placeholder="@username or profile link" />
+            </label>
+            <label class="resume-upload">
+              Resume
+              <input
+                type="file"
+                accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+                required
+                @change="handleResumeUpload"
+              />
+              <span>{{ applicationForm.resume_name || 'PDF, PNG, JPG, or JPEG' }}</span>
+            </label>
+          </div>
+
+          <div class="hero-actions">
+            <button class="primary-action" type="submit">Submit application</button>
+          </div>
+        </form>
       </section>
     </section>
 

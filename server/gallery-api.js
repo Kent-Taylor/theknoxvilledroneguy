@@ -1,5 +1,4 @@
 import {
-  getFirstGalleryItem,
   getGalleryItem,
   getGalleryItems,
   reorderGalleryItems,
@@ -79,40 +78,12 @@ function normalizeDriveFile(file) {
   }
 }
 
-async function fetchDriveFileMetadata(id, env = process.env) {
-  try {
-    const drive = getDriveClient(env)
-    const response = await drive.files.get({
-      fileId: id,
-      fields: 'id,parents',
-      supportsAllDrives: true,
-    })
-
-    return response.data
-  } catch (error) {
-    throw new Error(getGoogleDriveErrorMessage(error, 'Unable to read Google Drive file metadata'))
-  }
-}
-
 async function getGalleryFolderId(env = process.env) {
   if (env.GOOGLE_DRIVE_GALLERY_FOLDER_ID) {
     return env.GOOGLE_DRIVE_GALLERY_FOLDER_ID
   }
 
-  const firstItem = getFirstGalleryItem()
-
-  if (!firstItem) {
-    throw new Error('Set GOOGLE_DRIVE_GALLERY_FOLDER_ID to the Google Drive folder ID')
-  }
-
-  const metadata = await fetchDriveFileMetadata(firstItem.drive_id, env)
-  const [folderId] = metadata.parents || []
-
-  if (!folderId) {
-    throw new Error('Unable to determine the Google Drive gallery folder')
-  }
-
-  return folderId
+  throw new Error('Missing GOOGLE_DRIVE_GALLERY_FOLDER_ID')
 }
 
 async function fetchDriveFolderMedia(env = process.env) {

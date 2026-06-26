@@ -2,6 +2,7 @@ import { createReadStream, existsSync, statSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { extname, join, normalize } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { handleCareersApi } from './careers-api.js'
 import { loadLocalEnv } from './env.js'
 import { handleGalleryApi } from './gallery-api.js'
 import {
@@ -85,6 +86,10 @@ const server = createServer(async (req, res) => {
   }
 
   if (await handleGalleryApi(req, res)) {
+    return
+  }
+
+  if (await handleCareersApi(req, res)) {
     return
   }
 

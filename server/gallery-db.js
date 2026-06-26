@@ -86,6 +86,7 @@ function getDb() {
 
   if (!db) {
     db = new DatabaseSync(dbPath)
+    db.exec('PRAGMA foreign_keys = ON;')
     db.exec(`
       CREATE TABLE IF NOT EXISTS gallery_items (
         drive_id TEXT PRIMARY KEY,
@@ -110,6 +111,30 @@ function getDb() {
         name TEXT,
         picture TEXT,
         expires_at INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS jobs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS job_applications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        job_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        age TEXT NOT NULL,
+        city TEXT NOT NULL,
+        state TEXT NOT NULL,
+        instagram TEXT,
+        tiktok TEXT,
+        resume_name TEXT NOT NULL,
+        resume_type TEXT NOT NULL,
+        resume_data_url TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
       );
     `)
 
@@ -236,8 +261,7 @@ function getGalleryItems({ includeHidden = false } = {}) {
       `
         SELECT * FROM gallery_items
         ORDER BY
-          manual_order DESC,
-          CASE WHEN manual_order = 1 THEN sort_order ELSE 0 END ASC,
+          sort_order ASC,
           timestamp DESC
       `,
     )
@@ -256,8 +280,7 @@ function getFirstGalleryItem() {
       `
         SELECT * FROM gallery_items
         ORDER BY
-          manual_order DESC,
-          CASE WHEN manual_order = 1 THEN sort_order ELSE 0 END ASC,
+          sort_order ASC,
           timestamp DESC
         LIMIT 1
       `,
@@ -315,13 +338,18 @@ function syncGalleryItems(files) {
   const database = getDb()
   const existingRows = database.prepare('SELECT * FROM gallery_items').all()
   const existingById = new Map(existingRows.map((item) => [item.drive_id, item]))
-  let nextSortOrder =
-    existingRows.reduce((max, item) => Math.max(max, Number(item.sort_order) || 0), -1) + 1
+  const existingIds = new Set(existingRows.map((item) => item.drive_id))
+  const newIds = new Set(files.filter((file) => !existingIds.has(file.id)).map((file) => file.id))
+  let nextNewSortOrder = 0
+
+  if (newIds.size > 0) {
+    database.prepare('UPDATE gallery_items SET sort_order = sort_order + ?').run(newIds.size)
+  }
 
   const insert = database.prepare(`
     INSERT INTO gallery_items
-      (drive_id, title, media_type, mime_type, timestamp, width, height, duration_millis, drive_thumbnail_url, sort_order)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (drive_id, title, media_type, mime_type, timestamp, width, height, duration_millis, drive_thumbnail_url, sort_order, manual_order)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
   const update = database.prepare(`
     UPDATE gallery_items
@@ -332,11 +360,13 @@ function syncGalleryItems(files) {
         height = ?,
         duration_millis = ?,
         drive_thumbnail_url = ?,
+        sort_order = CASE WHEN manual_order = 1 THEN sort_order ELSE ? END,
+        manual_order = CASE WHEN ? = 1 THEN 1 ELSE manual_order END,
         updated_at = CURRENT_TIMESTAMP
     WHERE drive_id = ?
   `)
 
-  for (const file of files) {
+  files.forEach((file, index) => {
     const existing = existingById.get(file.id)
 
     if (existing) {
@@ -348,9 +378,11 @@ function syncGalleryItems(files) {
         file.height,
         file.durationMillis,
         file.thumbnailLink,
+        index,
+        newIds.has(file.id) ? 1 : 0,
         file.id,
       )
-      continue
+      return
     }
 
     insert.run(
@@ -363,10 +395,11 @@ function syncGalleryItems(files) {
       file.height,
       file.durationMillis,
       file.thumbnailLink,
-      nextSortOrder,
+      nextNewSortOrder,
+      1,
     )
-    nextSortOrder += 1
-  }
+    nextNewSortOrder += 1
+  })
 
   const fileIds = new Set(files.map((file) => file.id))
   const remove = database.prepare('DELETE FROM gallery_items WHERE drive_id = ?')
@@ -410,14 +443,135 @@ function deleteAdminSession(token) {
   }
 }
 
+function mapJob(row) {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  }
+}
+
+function getJobs() {
+  return getDb()
+    .prepare('SELECT * FROM jobs ORDER BY created_at DESC, id DESC')
+    .all()
+    .map(mapJob)
+}
+
+function getJob(id) {
+  const row = getDb().prepare('SELECT * FROM jobs WHERE id = ?').get(id)
+  return row ? mapJob(row) : null
+}
+
+function createJob({ title, description }) {
+  const result = getDb()
+    .prepare('INSERT INTO jobs (title, description) VALUES (?, ?)')
+    .run(title, description)
+
+  return getJob(result.lastInsertRowid)
+}
+
+function updateJob(id, { title, description }) {
+  const existing = getJob(id)
+
+  if (!existing) {
+    return null
+  }
+
+  getDb()
+    .prepare(
+      `
+        UPDATE jobs
+        SET title = ?, description = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `,
+    )
+    .run(title ?? existing.title, description ?? existing.description, id)
+
+  return getJob(id)
+}
+
+function deleteJob(id) {
+  const result = getDb().prepare('DELETE FROM jobs WHERE id = ?').run(id)
+  return result.changes > 0
+}
+
+function createJobApplication(jobId, payload) {
+  const result = getDb()
+    .prepare(
+      `
+        INSERT INTO job_applications
+          (job_id, name, age, city, state, instagram, tiktok, resume_name, resume_type, resume_data_url)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+    )
+    .run(
+      jobId,
+      payload.name,
+      payload.age,
+      payload.city,
+      payload.state,
+      payload.instagram || '',
+      payload.tiktok || '',
+      payload.resume_name,
+      payload.resume_type,
+      payload.resume_data_url,
+    )
+
+  return {
+    id: result.lastInsertRowid,
+    job_id: Number(jobId),
+    created_at: new Date().toISOString(),
+  }
+}
+
+function getJobApplications() {
+  return getDb()
+    .prepare(
+      `
+        SELECT
+          job_applications.*,
+          jobs.title AS job_title
+        FROM job_applications
+        JOIN jobs ON jobs.id = job_applications.job_id
+        ORDER BY job_applications.created_at DESC, job_applications.id DESC
+      `,
+    )
+    .all()
+    .map((row) => ({
+      id: row.id,
+      job_id: row.job_id,
+      job_title: row.job_title,
+      name: row.name,
+      age: row.age,
+      city: row.city,
+      state: row.state,
+      instagram: row.instagram || '',
+      tiktok: row.tiktok || '',
+      resume_name: row.resume_name,
+      resume_type: row.resume_type,
+      resume_data_url: row.resume_data_url,
+      created_at: row.created_at,
+    }))
+}
+
 export {
+  createJob,
+  createJobApplication,
   createAdminSession,
   deleteAdminSession,
+  deleteJob,
   getFirstGalleryItem,
   getAdminSession,
   getGalleryItem,
   getGalleryItems,
+  getJob,
+  getJobApplications,
+  getJobs,
   reorderGalleryItems,
   syncGalleryItems,
+  updateJob,
   updateGalleryItem,
 }
