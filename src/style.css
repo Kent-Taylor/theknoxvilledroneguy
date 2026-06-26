@@ -717,6 +717,14 @@ h3 {
   border-radius: 0;
 }
 
+.auth-error {
+  margin-top: 14px !important;
+  padding: 12px 14px;
+  color: #6b4a12 !important;
+  background: rgba(216, 163, 41, 0.18);
+  border: 1px solid rgba(216, 163, 41, 0.4);
+}
+
 .gallery-load-more {
   margin: 10px 0 0;
   color: var(--muted);

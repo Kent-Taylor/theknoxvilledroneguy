@@ -137,6 +137,27 @@ const selectedAdminItem = computed(() =>
 
 const visibleGalleryItems = computed(() => galleryItems.value.slice(0, visibleGalleryCount.value))
 const hasMoreGalleryItems = computed(() => visibleGalleryCount.value < galleryItems.value.length)
+const loginError = computed(() => {
+  if (page.value !== 'login') {
+    return ''
+  }
+
+  const params = new URLSearchParams(window.location.search)
+  const error = params.get('error')
+  const email = params.get('email')
+
+  if (error === 'not_allowed') {
+    return email
+      ? `${email} is not allowed as an admin. Add it to GOOGLE_ADMIN_EMAILS in Railway.`
+      : 'That Google account is not allowed as an admin. Add it to GOOGLE_ADMIN_EMAILS in Railway.'
+  }
+
+  if (error === 'invalid_state') {
+    return 'That login session expired. Please try signing in again.'
+  }
+
+  return error ? `Google login failed: ${error}` : ''
+})
 
 function navigate(path) {
   window.history.pushState({}, '', path)
@@ -751,6 +772,7 @@ onUnmounted(() => {
           This confirms your admin identity. The public gallery media is read by the server through
           a Google service account.
         </p>
+        <p v-if="loginError" class="auth-error">{{ loginError }}</p>
         <div class="hero-actions">
           <a class="primary-action" href="/api/google/auth/start">Sign in with Google</a>
         </div>

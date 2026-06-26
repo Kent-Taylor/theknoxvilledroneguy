@@ -12,8 +12,15 @@ function getGoogleConfig(env = process.env) {
     clientId: env.GOOGLE_CLIENT_ID || '',
     clientSecret: env.GOOGLE_CLIENT_SECRET || '',
     redirectUri: env.GOOGLE_REDIRECT_URI || '',
-    allowedEmail: env.GOOGLE_ADMIN_EMAIL || '',
+    allowedEmails: String(env.GOOGLE_ADMIN_EMAILS || env.GOOGLE_ADMIN_EMAIL || '')
+      .split(',')
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean),
   }
+}
+
+function isAllowedAdminEmail(email, allowedEmails) {
+  return allowedEmails.length === 0 || allowedEmails.includes(String(email || '').trim().toLowerCase())
 }
 
 function createState() {
@@ -151,8 +158,8 @@ async function handleGoogleAuthCallback(req, res, env = process.env) {
     const user = await getGoogleUser(tokens.access_token)
     const config = getGoogleConfig(env)
 
-    if (config.allowedEmail && user.email !== config.allowedEmail) {
-      redirect(res, '/login?error=not_allowed')
+    if (!isAllowedAdminEmail(user.email, config.allowedEmails)) {
+      redirect(res, `/login?error=not_allowed&email=${encodeURIComponent(user.email || '')}`)
       return
     }
 

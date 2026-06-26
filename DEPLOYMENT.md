@@ -17,7 +17,7 @@ and API routes. Deploy it to a Node-capable host connected to GitHub, not GitHub
 GOOGLE_CLIENT_ID=your_google_oauth_client_id
 GOOGLE_CLIENT_SECRET=your_google_oauth_client_secret
 GOOGLE_REDIRECT_URI=https://www.theknoxvilledroneguy.com/api/google/auth/callback
-GOOGLE_ADMIN_EMAIL=your_google_admin_email
+GOOGLE_ADMIN_EMAILS=your_google_admin_email,optional_second_admin_email
 GOOGLE_SERVICE_ACCOUNT_JSON=your_full_service_account_json
 GOOGLE_DRIVE_GALLERY_FOLDER_ID=your_google_drive_folder_id
 GALLERY_DB_PATH=/data/gallery.sqlite
