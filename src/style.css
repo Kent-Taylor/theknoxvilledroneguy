@@ -1019,11 +1019,71 @@ h3 {
 }
 
 .job-card {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 24px;
-  align-items: center;
   padding: 30px;
+}
+
+.job-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.job-card-header h2 {
+  margin-bottom: 0;
+}
+
+.job-toggle {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 46px;
+  padding: 10px 14px;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 800;
+  background: transparent;
+  border: 1px solid var(--line);
+}
+
+.job-toggle span {
+  width: 20px;
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.job-toggle:hover {
+  color: white;
+  background: var(--ink);
+}
+
+.job-details {
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+
+.job-apply-row {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.job-apply-row.is-top {
+  margin-bottom: 28px;
+}
+
+.job-apply-row.is-bottom {
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+
+.job-admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 18px;
 }
 
 .application-card {
@@ -1087,13 +1147,6 @@ h3 {
 .application-socials a {
   color: var(--rose);
   font-weight: 800;
-}
-
-.job-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 10px;
 }
 
 .application-panel {
@@ -1545,13 +1598,14 @@ code {
     display: flex;
   }
 
-  .job-actions {
-    justify-content: stretch;
+  .job-card-header {
+    align-items: stretch;
+    flex-direction: column;
   }
 
-  .job-actions .primary-action,
-  .job-actions .secondary-action {
-    flex: 1;
+  .job-toggle,
+  .job-apply-row .primary-action {
+    width: 100%;
   }
 
   .admin-layout {

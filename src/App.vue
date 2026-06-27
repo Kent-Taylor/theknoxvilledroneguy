@@ -83,6 +83,7 @@ const galleryItems = ref([])
 const adminItems = ref([])
 const jobs = ref([])
 const jobApplications = ref([])
+const expandedJobIds = ref(new Set())
 const visibleGalleryCount = ref(20)
 const galleryStatus = ref('Loading gallery...')
 const galleryError = ref('')
@@ -298,6 +299,22 @@ function editJob(job) {
     description: job.description,
   }
   setJobEditorHtml(job.description)
+}
+
+function isJobExpanded(jobId) {
+  return expandedJobIds.value.has(jobId)
+}
+
+function toggleJob(jobId) {
+  const nextExpandedJobs = new Set(expandedJobIds.value)
+
+  if (nextExpandedJobs.has(jobId)) {
+    nextExpandedJobs.delete(jobId)
+  } else {
+    nextExpandedJobs.add(jobId)
+  }
+
+  expandedJobIds.value = nextExpandedJobs
 }
 
 function setJobEditorHtml(html = '') {
@@ -1035,17 +1052,46 @@ onUnmounted(() => {
         </article>
 
         <article v-for="job in jobs" :key="job.id" class="job-card">
-          <div>
-            <p class="eyebrow">Open position</p>
-            <h2>{{ job.title }}</h2>
-            <div class="job-description" v-html="job.description"></div>
+          <div class="job-card-header">
+            <div>
+              <p class="eyebrow">Open position</p>
+              <h2>{{ job.title }}</h2>
+            </div>
+            <button
+              class="job-toggle"
+              type="button"
+              :aria-expanded="isJobExpanded(job.id)"
+              :aria-controls="`job-details-${job.id}`"
+              @click="toggleJob(job.id)"
+            >
+              {{ isJobExpanded(job.id) ? 'Collapse post' : 'View position' }}
+              <span aria-hidden="true">{{ isJobExpanded(job.id) ? '−' : '+' }}</span>
+            </button>
           </div>
-          <div class="job-actions">
-            <button class="primary-action" type="button" @click="openApplication(job)">Apply</button>
-            <template v-if="authStatus.loggedIn">
-              <button class="secondary-action" type="button" @click="editJob(job)">Edit</button>
-              <button class="secondary-action" type="button" @click="removeJob(job)">Delete</button>
-            </template>
+
+          <div v-if="authStatus.loggedIn" class="job-admin-actions">
+            <button class="secondary-action" type="button" @click="editJob(job)">Edit</button>
+            <button class="secondary-action" type="button" @click="removeJob(job)">Delete</button>
+          </div>
+
+          <div
+            v-if="isJobExpanded(job.id)"
+            :id="`job-details-${job.id}`"
+            class="job-details"
+          >
+            <div class="job-apply-row is-top">
+              <button class="primary-action" type="button" @click="openApplication(job)">
+                Apply now
+              </button>
+            </div>
+
+            <div class="job-description" v-html="job.description"></div>
+
+            <div class="job-apply-row is-bottom">
+              <button class="primary-action" type="button" @click="openApplication(job)">
+                Apply now
+              </button>
+            </div>
           </div>
         </article>
       </section>
