@@ -972,6 +972,8 @@ h3 {
   margin: 0.25em 0;
 }
 
+.rich-editor h1,
+.rich-editor h2,
 .rich-editor h3,
 .rich-editor h4,
 .job-description h1,

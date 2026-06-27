@@ -1,3 +1,4 @@
+import sanitizeHtml from 'sanitize-html'
 import {
   createJob,
   createJobApplication,
@@ -34,89 +35,101 @@ function cleanText(value) {
   return String(value || '').trim()
 }
 
-function escapeHtml(value) {
-  return String(value || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-}
-
-function sanitizeColor(value) {
-  const color = cleanText(value).replace(/['"]/g, '')
-
-  if (/^#[0-9a-f]{3}([0-9a-f]{3})?$/i.test(color)) {
-    return color
-  }
-
-  if (/^rgb\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*\)$/i.test(color)) {
-    return color
-  }
-
-  return ''
-}
-
 function sanitizeRichText(value) {
-  const allowedTags = new Set([
-    'p',
-    'br',
-    'strong',
-    'b',
-    'em',
-    'i',
-    'ul',
-    'ol',
-    'li',
-    'span',
-    'h1',
-    'h2',
-    'h3',
-    'h4',
-  ])
-  const rawHtml = String(value || '')
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
-    .replace(/<!--[\s\S]*?-->/g, '')
+  const colorPattern =
+    /^(?:#[0-9a-f]{3,8}|rgba?\(\s*[\d.%\s,]+\)|hsla?\(\s*[\d.%\s,]+\)|[a-z]+)$/i
+  const lengthPattern = /^(?:0|[-+]?\d*\.?\d+(?:px|pt|em|rem|%))$/i
 
-  return rawHtml
-    .replace(/<\s*(\/?)\s*font\b([^>]*)>/gi, (_, closing, attrs = '') => {
-      if (closing) {
-        return '</span>'
-      }
+  return sanitizeHtml(String(value || ''), {
+    allowedTags: [
+      'p',
+      'div',
+      'br',
+      'strong',
+      'b',
+      'em',
+      'i',
+      'u',
+      's',
+      'blockquote',
+      'pre',
+      'code',
+      'ul',
+      'ol',
+      'li',
+      'span',
+      'h1',
+      'h2',
+      'h3',
+      'h4',
+      'a',
+    ],
+    allowedAttributes: {
+      '*': ['style'],
+      a: ['href', 'target', 'rel', 'style'],
+    },
+    allowedSchemes: ['http', 'https', 'mailto'],
+    allowedSchemesAppliedToAttributes: ['href'],
+    allowedStyles: {
+      '*': {
+        color: [colorPattern],
+        'background-color': [colorPattern],
+        'font-family': [/^[a-z0-9\s,'"-]+$/i],
+        'font-size': [/^(?:\d*\.?\d+(?:px|pt|em|rem|%)|small|medium|large|x-large)$/i],
+        'font-style': [/^(?:normal|italic|oblique)$/i],
+        'font-weight': [/^(?:normal|bold|bolder|lighter|[1-9]00)$/i],
+        'letter-spacing': [lengthPattern, /^normal$/i],
+        'line-height': [/^(?:normal|\d*\.?\d+(?:px|pt|em|rem|%)?)$/i],
+        'list-style-type': [/^[a-z-]+$/i],
+        'margin-bottom': [lengthPattern],
+        'margin-left': [lengthPattern],
+        'margin-right': [lengthPattern],
+        'margin-top': [lengthPattern],
+        'padding-left': [lengthPattern],
+        'text-align': [/^(?:left|center|right|justify|start|end)$/i],
+        'text-decoration': [/^(?:none|underline|line-through)(?:\s+(?:underline|line-through))?$/i],
+        'text-indent': [lengthPattern],
+        'text-transform': [/^(?:none|uppercase|lowercase|capitalize)$/i],
+        'white-space': [/^(?:normal|pre|pre-wrap)$/i],
+      },
+    },
+    transformTags: {
+      a: (tagName, attribs) => ({
+        tagName,
+        attribs: {
+          ...attribs,
+          ...(attribs.target === '_blank' ? { rel: 'noopener noreferrer' } : {}),
+        },
+      }),
+      font: (tagName, attribs) => {
+        const legacyFontSizes = {
+          1: '0.75rem',
+          2: '0.875rem',
+          3: '1rem',
+          4: '1.125rem',
+          5: '1.5rem',
+          6: '2rem',
+          7: '3rem',
+        }
+        const styles = [
+          attribs.color ? `color: ${attribs.color}` : '',
+          attribs.face ? `font-family: ${attribs.face}` : '',
+          legacyFontSizes[attribs.size] ? `font-size: ${legacyFontSizes[attribs.size]}` : '',
+        ].filter(Boolean)
 
-      const color = sanitizeColor(attrs.match(/\bcolor\s*=\s*["']?([^"'\s>]+)/i)?.[1])
-      return color ? `<span style="color: ${color};">` : '<span>'
-    })
-    .replace(/<([^>]+)>/g, (match, tagBody) => {
-      const trimmed = tagBody.trim()
-      const closing = trimmed.startsWith('/')
-      const tagName = trimmed.replace(/^\//, '').split(/\s+/)[0].toLowerCase()
-
-      if (!allowedTags.has(tagName)) {
-        return escapeHtml(match)
-      }
-
-      if (closing) {
-        return tagName === 'br' ? '' : `</${tagName}>`
-      }
-
-      if (tagName === 'br') {
-        return '<br>'
-      }
-
-      if (tagName === 'span') {
-        const color = sanitizeColor(trimmed.match(/\bcolor\s*:\s*([^;"']+)/i)?.[1])
-        return color ? `<span style="color: ${color};">` : '<span>'
-      }
-
-      return `<${tagName}>`
-    })
-    .trim()
+        return {
+          tagName: 'span',
+          attribs: styles.length ? { style: styles.join('; ') } : {},
+        }
+      },
+    },
+    nestingLimit: 30,
+  }).trim()
 }
 
 function decodeAllowedEscapedTags(value) {
   return String(value || '').replace(
-    /&lt;\s*(\/?)\s*(h1|h2|h3|h4|p|br|strong|b|em|i|ul|ol|li|span)\b([^&]*)&gt;/gi,
+    /&lt;\s*(\/?)\s*(h1|h2|h3|h4|p|div|br|strong|b|em|i|u|s|blockquote|pre|code|ul|ol|li|span|a)\b([\s\S]*?)&gt;/gi,
     (_, closing, tagName, attrs = '') => {
       const tag = tagName.toLowerCase()
 
@@ -128,16 +141,7 @@ function decodeAllowedEscapedTags(value) {
         return '<br>'
       }
 
-      if (tag === 'span') {
-        const color = sanitizeColor(
-          attrs
-            .replace(/&quot;/g, '"')
-            .match(/\bcolor\s*:\s*([^;"']+)/i)?.[1],
-        )
-        return color ? `<span style="color: ${color};">` : '<span>'
-      }
-
-      return `<${tag}>`
+      return `<${tag}${attrs.replace(/&quot;/g, '"').replace(/&#039;/g, "'")}>`
     },
   )
 }
@@ -360,4 +364,4 @@ async function handleCareersApi(req, res) {
   return false
 }
 
-export { handleCareersApi }
+export { handleCareersApi, sanitizeRichText }
