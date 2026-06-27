@@ -92,6 +92,8 @@ const selectedAdminItemId = ref('')
 const selectedGalleryItem = ref(null)
 const saveStatus = ref('')
 const careersStatus = ref('')
+const applicationStatus = ref({ type: '', message: '' })
+const applicationSubmitting = ref(false)
 const jobForm = ref({ id: null, title: '', description: '' })
 const jobEditor = ref(null)
 const selectedJob = ref(null)
@@ -340,7 +342,14 @@ async function saveJob() {
       jobs.value = [saved, ...jobs.value]
     }
 
-    careersStatus.value = 'Job saved'
+    const storedJobs = await fetchJson('/api/jobs')
+
+    if (!storedJobs.some((job) => job.id === saved.id)) {
+      throw new Error('The job could not be confirmed in storage')
+    }
+
+    jobs.value = storedJobs
+    careersStatus.value = 'Job saved and confirmed in storage'
     resetJobForm()
   } catch (error) {
     careersStatus.value = error.message
@@ -379,7 +388,7 @@ function resetApplicationForm() {
 
 function openApplication(job) {
   selectedJob.value = job
-  careersStatus.value = ''
+  applicationStatus.value = { type: '', message: '' }
   resetApplicationForm()
 }
 
@@ -398,11 +407,24 @@ function handleResumeUpload(event) {
   const acceptedTypes = new Set(['application/pdf', 'image/png', 'image/jpeg'])
 
   if (!acceptedTypes.has(file.type)) {
-    careersStatus.value = 'Resume must be a PDF, PNG, JPG, or JPEG file'
+    applicationStatus.value = {
+      type: 'error',
+      message: 'Resume must be a PDF, PNG, JPG, or JPEG file.',
+    }
     event.target.value = ''
     return
   }
 
+  if (file.size > 5 * 1024 * 1024) {
+    applicationStatus.value = {
+      type: 'error',
+      message: 'Resume must be 5 MB or smaller.',
+    }
+    event.target.value = ''
+    return
+  }
+
+  applicationStatus.value = { type: '', message: '' }
   const reader = new FileReader()
   reader.onload = () => {
     applicationForm.value = {
@@ -434,18 +456,32 @@ async function submitApplication() {
     return
   }
 
-  careersStatus.value = 'Submitting application...'
+  if (!applicationForm.value.resume_data_url) {
+    applicationStatus.value = { type: 'error', message: 'Please upload your resume.' }
+    return
+  }
+
+  applicationSubmitting.value = true
+  applicationStatus.value = { type: 'loading', message: 'Submitting your application...' }
 
   try {
-    await fetchJson(`/api/jobs/${selectedJob.value.id}/apply`, {
+    const result = await fetchJson(`/api/jobs/${selectedJob.value.id}/apply`, {
       method: 'POST',
       body: JSON.stringify(applicationForm.value),
     })
-    careersStatus.value = 'Application submitted'
+    applicationStatus.value = {
+      type: result.notification_sent === false ? 'warning' : 'success',
+      message: result.message || 'Your application was submitted successfully.',
+    }
     await loadAdminGallery()
-    closeApplication()
+    resetApplicationForm()
   } catch (error) {
-    careersStatus.value = error.message
+    applicationStatus.value = {
+      type: 'error',
+      message: `There was a problem submitting your application: ${error.message}`,
+    }
+  } finally {
+    applicationSubmitting.value = false
   }
 }
 
@@ -1009,6 +1045,16 @@ onUnmounted(() => {
             <p class="eyebrow">{{ application.job_title }}</p>
             <h3>{{ application.name }}</h3>
             <p>{{ application.age }} · {{ application.city }}, {{ application.state }}</p>
+            <p
+              class="notification-state"
+              :class="application.notification_sent ? 'is-sent' : 'is-failed'"
+            >
+              {{
+                application.notification_sent
+                  ? 'Email notification sent'
+                  : 'Email notification failed'
+              }}
+            </p>
             <p v-if="application.instagram || application.tiktok" class="application-socials">
               <a
                 v-if="application.instagram"
@@ -1050,29 +1096,46 @@ onUnmounted(() => {
           <div class="media-viewer-header">
             <div>
               <strong>Apply for {{ selectedJob.title }}</strong>
-              <span>{{ careersStatus || 'Tell us a little about you.' }}</span>
+              <span>Tell us a little about you.</span>
             </div>
             <button class="secondary-action compact" type="button" @click="closeApplication">
               Close
             </button>
           </div>
 
+          <p
+            v-if="applicationStatus.message"
+            class="form-status"
+            :class="`is-${applicationStatus.type}`"
+            :role="applicationStatus.type === 'error' ? 'alert' : 'status'"
+            aria-live="polite"
+          >
+            {{ applicationStatus.message }}
+          </p>
+
           <div class="application-fields">
             <label>
               Name
-              <input v-model="applicationForm.name" required />
+              <input v-model="applicationForm.name" required autocomplete="name" />
             </label>
             <label>
               Age
-              <input v-model="applicationForm.age" required inputmode="numeric" />
+              <input
+                v-model="applicationForm.age"
+                type="number"
+                min="14"
+                max="120"
+                required
+                inputmode="numeric"
+              />
             </label>
             <label>
               City
-              <input v-model="applicationForm.city" required />
+              <input v-model="applicationForm.city" required autocomplete="address-level2" />
             </label>
             <label>
               State
-              <input v-model="applicationForm.state" required />
+              <input v-model="applicationForm.state" required autocomplete="address-level1" />
             </label>
             <label>
               Instagram
@@ -1095,7 +1158,9 @@ onUnmounted(() => {
           </div>
 
           <div class="hero-actions">
-            <button class="primary-action" type="submit">Submit application</button>
+            <button class="primary-action" type="submit" :disabled="applicationSubmitting">
+              {{ applicationSubmitting ? 'Submitting...' : 'Submit application' }}
+            </button>
           </div>
         </form>
       </section>

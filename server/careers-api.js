@@ -5,8 +5,10 @@ import {
   getJob,
   getJobApplications,
   getJobs,
+  updateJobApplicationNotification,
   updateJob,
 } from './gallery-db.js'
+import { sendApplicationNotification } from './careers-email.js'
 import { requireAdmin } from './google-auth.js'
 
 const ACCEPTED_RESUME_TYPES = new Set(['application/pdf', 'image/png', 'image/jpeg'])
@@ -191,6 +193,12 @@ function validateApplicationPayload(job, body) {
     throw new Error('Name, age, city, and state are required')
   }
 
+  const age = Number.parseInt(payload.age, 10)
+
+  if (!Number.isInteger(age) || age < 14 || age > 120) {
+    throw new Error('Enter a valid age')
+  }
+
   if (!payload.resume_name || !payload.resume_data_url) {
     throw new Error('Resume upload is required')
   }
@@ -280,11 +288,34 @@ async function handleCareersApi(req, res) {
   if (applyMatch && req.method === 'POST') {
     try {
       const job = getJob(Number(applyMatch[1]))
-      const application = createJobApplication(
-        Number(applyMatch[1]),
-        validateApplicationPayload(job, await readJsonBody(req)),
-      )
-      jsonResponse(res, 201, application)
+      const applicationPayload = validateApplicationPayload(job, await readJsonBody(req))
+      const application = createJobApplication(Number(applyMatch[1]), applicationPayload)
+      const applicationDetails = {
+        ...application,
+        ...applicationPayload,
+      }
+
+      try {
+        await sendApplicationNotification(job, applicationDetails)
+        updateJobApplicationNotification(application.id, { sent: true })
+        jsonResponse(res, 201, {
+          ok: true,
+          message: 'Your application was submitted successfully.',
+          notification_sent: true,
+        })
+      } catch (emailError) {
+        updateJobApplicationNotification(application.id, {
+          sent: false,
+          error: emailError.message,
+        })
+        console.error(`Career application ${application.id} email failed: ${emailError.message}`)
+        jsonResponse(res, 202, {
+          ok: true,
+          message:
+            'Your application was saved successfully, but the email notification could not be sent. The site owner can still review it.',
+          notification_sent: false,
+        })
+      }
     } catch (error) {
       jsonResponse(res, 400, { error: 'Unable to submit application', message: error.message })
     }

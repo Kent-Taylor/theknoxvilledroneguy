@@ -103,6 +103,30 @@ exposes:
 - `/api/gallery/reorder` — saves drag order
 - `/api/gallery/items/:driveId` — saves title, visibility, and selected thumbnail
 
+## Careers Storage And Email
+
+Jobs and applications are stored in the same SQLite database as the gallery settings. On Railway,
+mount a persistent volume at `/data` and set:
+
+```bash
+GALLERY_DB_PATH=/data/gallery.sqlite
+```
+
+Without a Railway volume, files written by a deployment are temporary and job posts can disappear
+after a restart or redeploy.
+
+Application notifications use the Resend email API directly from the server. Verify
+`theknoxvilledroneguy.com` in Resend, then add these Railway service variables:
+
+```bash
+RESEND_API_KEY=re_your_resend_api_key
+CAREERS_FROM_EMAIL=The Knoxville Drone Guy <careers@theknoxvilledroneguy.com>
+CAREERS_NOTIFICATION_EMAIL=theknoxvilledroneguy@gmail.com
+```
+
+The applicant's resume is attached to the notification. These values are server-only and must not
+use a `VITE_` prefix.
+
 The endpoint requests only the fields needed by the UI:
 
 ```text

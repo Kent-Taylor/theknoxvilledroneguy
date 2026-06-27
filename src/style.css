@@ -1044,6 +1044,24 @@ h3 {
   line-height: 1.55;
 }
 
+.notification-state {
+  display: inline-flex;
+  margin-top: 8px;
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  border: 1px solid currentColor;
+}
+
+.notification-state.is-sent {
+  color: #35643d;
+}
+
+.notification-state.is-failed {
+  color: #9b3c32;
+}
+
 .application-socials {
   display: flex;
   flex-wrap: wrap;
@@ -1073,6 +1091,37 @@ h3 {
 .application-fields {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   padding: 24px;
+}
+
+.form-status {
+  margin: 18px 24px 0;
+  padding: 12px 14px;
+  color: var(--ink);
+  line-height: 1.5;
+  background: #f7f2df;
+  border: 1px solid var(--gold);
+}
+
+.form-status.is-success {
+  color: #244c2a;
+  background: #eef7ec;
+  border-color: #77a875;
+}
+
+.form-status.is-error {
+  color: #7d2923;
+  background: #fff0ed;
+  border-color: #d98c82;
+}
+
+.form-status.is-warning {
+  color: #785316;
+  background: #fff6db;
+}
+
+.primary-action:disabled {
+  cursor: wait;
+  opacity: 0.62;
 }
 
 .resume-upload {

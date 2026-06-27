@@ -85,6 +85,12 @@ function getDb() {
   }
 
   if (!db) {
+    if (process.env.RAILWAY_ENVIRONMENT && !dbPath.startsWith('/data/')) {
+      console.warn(
+        'GALLERY_DB_PATH is not under /data. Mount a Railway volume at /data and set GALLERY_DB_PATH=/data/gallery.sqlite so jobs persist across deploys.',
+      )
+    }
+
     db = new DatabaseSync(dbPath)
     db.exec('PRAGMA foreign_keys = ON;')
     db.exec(`
@@ -133,12 +139,15 @@ function getDb() {
         resume_name TEXT NOT NULL,
         resume_type TEXT NOT NULL,
         resume_data_url TEXT NOT NULL,
+        notification_sent INTEGER NOT NULL DEFAULT 0,
+        notification_error TEXT,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
       );
     `)
 
     migrateGalleryItems()
+    migrateJobApplications()
 
     const count = db.prepare('SELECT COUNT(*) AS count FROM gallery_items').get().count
 
@@ -156,6 +165,27 @@ function getDb() {
   }
 
   return db
+}
+
+function migrateJobApplications() {
+  const columns = getDb()
+    .prepare('PRAGMA table_info(job_applications)')
+    .all()
+    .map((column) => column.name)
+
+  const migrations = [
+    [
+      'notification_sent',
+      'ALTER TABLE job_applications ADD COLUMN notification_sent INTEGER NOT NULL DEFAULT 0',
+    ],
+    ['notification_error', 'ALTER TABLE job_applications ADD COLUMN notification_error TEXT'],
+  ]
+
+  for (const [columnName, statement] of migrations) {
+    if (!columns.includes(columnName)) {
+      getDb().exec(statement)
+    }
+  }
 }
 
 function migrateGalleryItems() {
@@ -527,6 +557,18 @@ function createJobApplication(jobId, payload) {
   }
 }
 
+function updateJobApplicationNotification(id, { sent, error = '' }) {
+  getDb()
+    .prepare(
+      `
+        UPDATE job_applications
+        SET notification_sent = ?, notification_error = ?
+        WHERE id = ?
+      `,
+    )
+    .run(sent ? 1 : 0, error || null, id)
+}
+
 function getJobApplications() {
   return getDb()
     .prepare(
@@ -553,6 +595,8 @@ function getJobApplications() {
       resume_name: row.resume_name,
       resume_type: row.resume_type,
       resume_data_url: row.resume_data_url,
+      notification_sent: Boolean(row.notification_sent),
+      notification_error: row.notification_error || '',
       created_at: row.created_at,
     }))
 }
@@ -572,6 +616,7 @@ export {
   getJobs,
   reorderGalleryItems,
   syncGalleryItems,
+  updateJobApplicationNotification,
   updateJob,
   updateGalleryItem,
 }
