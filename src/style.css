@@ -1044,6 +1044,13 @@ h3 {
   line-height: 1.55;
 }
 
+.application-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .notification-state {
   display: inline-flex;
   margin-top: 8px;
@@ -1060,6 +1067,14 @@ h3 {
 
 .notification-state.is-failed {
   color: #9b3c32;
+}
+
+.notification-error {
+  max-width: 680px;
+  margin-top: 8px;
+  color: #7d2923;
+  font-size: 0.86rem;
+  overflow-wrap: anywhere;
 }
 
 .application-socials {

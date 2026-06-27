@@ -3,6 +3,7 @@ import {
   createJobApplication,
   deleteJob,
   getJob,
+  getJobApplication,
   getJobApplications,
   getJobs,
   updateJobApplicationNotification,
@@ -229,6 +230,39 @@ async function handleCareersApi(req, res) {
     }
 
     jsonResponse(res, 200, getJobApplications())
+    return true
+  }
+
+  const notificationMatch = path.match(/^\/api\/jobs\/applications\/(\d+)\/notify$/)
+
+  if (notificationMatch && req.method === 'POST') {
+    if (!requireAdmin(req, res)) {
+      return true
+    }
+
+    const application = getJobApplication(Number(notificationMatch[1]))
+
+    if (!application) {
+      jsonResponse(res, 404, { error: 'Application not found' })
+      return true
+    }
+
+    try {
+      await sendApplicationNotification({ title: application.job_title }, application)
+      updateJobApplicationNotification(application.id, { sent: true })
+      jsonResponse(res, 200, {
+        ok: true,
+        message: `Email notification sent to ${process.env.CAREERS_NOTIFICATION_EMAIL || 'the configured address'}.`,
+      })
+    } catch (error) {
+      updateJobApplicationNotification(application.id, { sent: false, error: error.message })
+      console.error(`Career application ${application.id} email retry failed: ${error.message}`)
+      jsonResponse(res, 502, {
+        error: 'Email notification failed',
+        message: error.message,
+      })
+    }
+
     return true
   }
 

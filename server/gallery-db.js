@@ -557,6 +557,43 @@ function createJobApplication(jobId, payload) {
   }
 }
 
+function mapJobApplication(row) {
+  return {
+    id: row.id,
+    job_id: row.job_id,
+    job_title: row.job_title,
+    name: row.name,
+    age: row.age,
+    city: row.city,
+    state: row.state,
+    instagram: row.instagram || '',
+    tiktok: row.tiktok || '',
+    resume_name: row.resume_name,
+    resume_type: row.resume_type,
+    resume_data_url: row.resume_data_url,
+    notification_sent: Boolean(row.notification_sent),
+    notification_error: row.notification_error || '',
+    created_at: row.created_at,
+  }
+}
+
+function getJobApplication(id) {
+  const row = getDb()
+    .prepare(
+      `
+        SELECT
+          job_applications.*,
+          jobs.title AS job_title
+        FROM job_applications
+        JOIN jobs ON jobs.id = job_applications.job_id
+        WHERE job_applications.id = ?
+      `,
+    )
+    .get(id)
+
+  return row ? mapJobApplication(row) : null
+}
+
 function updateJobApplicationNotification(id, { sent, error = '' }) {
   getDb()
     .prepare(
@@ -582,23 +619,7 @@ function getJobApplications() {
       `,
     )
     .all()
-    .map((row) => ({
-      id: row.id,
-      job_id: row.job_id,
-      job_title: row.job_title,
-      name: row.name,
-      age: row.age,
-      city: row.city,
-      state: row.state,
-      instagram: row.instagram || '',
-      tiktok: row.tiktok || '',
-      resume_name: row.resume_name,
-      resume_type: row.resume_type,
-      resume_data_url: row.resume_data_url,
-      notification_sent: Boolean(row.notification_sent),
-      notification_error: row.notification_error || '',
-      created_at: row.created_at,
-    }))
+    .map(mapJobApplication)
 }
 
 export {
@@ -612,6 +633,7 @@ export {
   getGalleryItem,
   getGalleryItems,
   getJob,
+  getJobApplication,
   getJobApplications,
   getJobs,
   reorderGalleryItems,

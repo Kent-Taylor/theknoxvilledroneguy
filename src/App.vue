@@ -372,6 +372,21 @@ async function removeJob(job) {
   }
 }
 
+async function retryApplicationEmail(application) {
+  careersStatus.value = `Retrying email for ${application.name}...`
+
+  try {
+    const result = await fetchJson(`/api/jobs/applications/${application.id}/notify`, {
+      method: 'POST',
+    })
+    careersStatus.value = result.message
+    await loadAdminGallery()
+  } catch (error) {
+    careersStatus.value = `Email retry failed: ${error.message}`
+    await loadAdminGallery()
+  }
+}
+
 function resetApplicationForm() {
   applicationForm.value = {
     name: '',
@@ -1055,6 +1070,12 @@ onUnmounted(() => {
                   : 'Email notification failed'
               }}
             </p>
+            <p
+              v-if="!application.notification_sent && application.notification_error"
+              class="notification-error"
+            >
+              {{ application.notification_error }}
+            </p>
             <p v-if="application.instagram || application.tiktok" class="application-socials">
               <a
                 v-if="application.instagram"
@@ -1074,13 +1095,23 @@ onUnmounted(() => {
               </a>
             </p>
           </div>
-          <a
-            class="secondary-action compact"
-            :href="application.resume_data_url"
-            :download="application.resume_name"
-          >
-            Resume
-          </a>
+          <div class="application-actions">
+            <a
+              class="secondary-action compact"
+              :href="application.resume_data_url"
+              :download="application.resume_name"
+            >
+              Resume
+            </a>
+            <button
+              v-if="!application.notification_sent"
+              class="secondary-action compact"
+              type="button"
+              @click="retryApplicationEmail(application)"
+            >
+              Retry email
+            </button>
+          </div>
         </article>
       </section>
 
