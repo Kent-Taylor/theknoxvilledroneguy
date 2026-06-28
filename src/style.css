@@ -1106,6 +1106,11 @@ h3 {
   line-height: 1.55;
 }
 
+.application-submitted {
+  margin-top: 5px;
+  font-size: 0.86rem;
+}
+
 .application-actions {
   display: flex;
   flex-wrap: wrap;

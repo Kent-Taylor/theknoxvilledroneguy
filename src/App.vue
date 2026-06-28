@@ -1,6 +1,7 @@
 <script setup>
 import { faFacebookF, faInstagram, faTiktok } from '@fortawesome/free-brands-svg-icons'
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { buildSocialProfileUrl, formatApplicationSubmittedAt } from './application-utils.js'
 import heroImage from './assets/knoxville-drone-hero.png'
 import logoImage from './assets/knoxville-drone-guy-logo.png'
 
@@ -467,20 +468,6 @@ function handleResumeUpload(event) {
     }
   }
   reader.readAsDataURL(file)
-}
-
-function normalizeExternalUrl(value) {
-  const trimmed = String(value || '').trim()
-
-  if (!trimmed) {
-    return ''
-  }
-
-  if (/^https?:\/\//i.test(trimmed)) {
-    return trimmed
-  }
-
-  return `https://${trimmed.replace(/^@/, '')}`
 }
 
 async function submitApplication() {
@@ -1106,6 +1093,9 @@ onUnmounted(() => {
             <p class="eyebrow">{{ application.job_title }}</p>
             <h3>{{ application.name }}</h3>
             <p>{{ application.age }} · {{ application.city }}, {{ application.state }}</p>
+            <p class="application-submitted">
+              Submitted {{ formatApplicationSubmittedAt(application.created_at) }}
+            </p>
             <p
               class="notification-state"
               :class="application.notification_sent ? 'is-sent' : 'is-failed'"
@@ -1125,7 +1115,7 @@ onUnmounted(() => {
             <p v-if="application.instagram || application.tiktok" class="application-socials">
               <a
                 v-if="application.instagram"
-                :href="normalizeExternalUrl(application.instagram)"
+                :href="buildSocialProfileUrl(application.instagram, 'instagram')"
                 target="_blank"
                 rel="noopener noreferrer"
               >
@@ -1133,7 +1123,7 @@ onUnmounted(() => {
               </a>
               <a
                 v-if="application.tiktok"
-                :href="normalizeExternalUrl(application.tiktok)"
+                :href="buildSocialProfileUrl(application.tiktok, 'tiktok')"
                 target="_blank"
                 rel="noopener noreferrer"
               >

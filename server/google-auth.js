@@ -5,6 +5,8 @@ const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
 const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v2/userinfo'
 const PROFILE_SCOPE = 'openid email profile'
+const ADMIN_SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60
+const ADMIN_SESSION_MAX_AGE_MILLISECONDS = ADMIN_SESSION_MAX_AGE_SECONDS * 1000
 const stateStore = new Map()
 
 function getGoogleConfig(env = process.env) {
@@ -75,10 +77,29 @@ function redirect(res, location) {
 
 function getSessionCookie(token, req) {
   const forwardedProto = req.headers['x-forwarded-proto'] || ''
-  const isSecure = forwardedProto.includes('https') || req.headers.host?.includes('theknoxvilledroneguy.com')
+  const hostname = String(req.headers.host || '')
+    .split(':')[0]
+    .toLowerCase()
+  const isProductionDomain =
+    hostname === 'theknoxvilledroneguy.com' || hostname === 'www.theknoxvilledroneguy.com'
+  const isSecure = forwardedProto.includes('https') || isProductionDomain
   const secureFlag = isSecure ? '; Secure' : ''
+  const domainFlag = isProductionDomain ? '; Domain=theknoxvilledroneguy.com' : ''
+  const expires = new Date(Date.now() + ADMIN_SESSION_MAX_AGE_MILLISECONDS).toUTCString()
 
-  return `kgd_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${7 * 24 * 60 * 60}${secureFlag}`
+  return `kgd_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${ADMIN_SESSION_MAX_AGE_SECONDS}; Expires=${expires}${domainFlag}${secureFlag}`
+}
+
+function getExpiredSessionCookie(req) {
+  const hostname = String(req.headers.host || '')
+    .split(':')[0]
+    .toLowerCase()
+  const isProductionDomain =
+    hostname === 'theknoxvilledroneguy.com' || hostname === 'www.theknoxvilledroneguy.com'
+  const domainFlag = isProductionDomain ? '; Domain=theknoxvilledroneguy.com' : ''
+  const secureFlag = isProductionDomain ? '; Secure' : ''
+
+  return `kgd_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT${domainFlag}${secureFlag}`
 }
 
 async function exchangeCodeForTokens(code, env = process.env) {
@@ -169,7 +190,7 @@ async function handleGoogleAuthCallback(req, res, env = process.env) {
       email: user.email,
       name: user.name,
       picture: user.picture,
-      expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+      expiresAt: Date.now() + ADMIN_SESSION_MAX_AGE_MILLISECONDS,
     })
 
     res.writeHead(302, {
@@ -201,13 +222,15 @@ async function handleGoogleLogout(req, res) {
   deleteAdminSession(getCookie(req, 'kgd_session'))
   res.writeHead(302, {
     Location: '/login',
-    'Set-Cookie': 'kgd_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0',
+    'Set-Cookie': getExpiredSessionCookie(req),
   })
   res.end()
 }
 
 export {
   getAdminFromRequest,
+  getExpiredSessionCookie,
+  getSessionCookie,
   handleGoogleAuthCallback,
   handleGoogleAuthStart,
   handleGoogleAuthStatus,
