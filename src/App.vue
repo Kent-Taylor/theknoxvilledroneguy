@@ -2,55 +2,110 @@
 import { faFacebookF, faInstagram, faTiktok } from '@fortawesome/free-brands-svg-icons'
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { buildSocialProfileUrl, formatApplicationSubmittedAt } from './application-utils.js'
+import toursImage from './assets/services/360-tours.jpg'
+import commercialImage from './assets/services/commercial.jpg'
+import constructionImage from './assets/services/construction.jpg'
+import customContentImage from './assets/services/custom-content.jpg'
+import eventsImage from './assets/services/events.jpg'
+import inspectionsImage from './assets/services/inspections.jpg'
+import realEstateImage from './assets/services/real-estate.jpg'
 import heroImage from './assets/knoxville-drone-hero.png'
 import logoImage from './assets/knoxville-drone-guy-logo.png'
 
 const services = [
   {
     name: 'Real Estate Photo & Video',
-    accent: 'coral',
+    icon: '⌂',
+    image: realEstateImage,
     description:
-      'Listing-ready aerial coverage for homes, land, developments, and short-term rentals.',
+      'Listing-ready aerial photos and cinematic video for homes, land, luxury properties, and short-term rentals.',
   },
   {
     name: 'Commercial Property',
-    accent: 'gold',
+    icon: '▦',
+    iconClass: 'building',
+    image: commercialImage,
     description:
-      'Sharp exterior visuals for builders, brokers, roofers, venues, and local businesses.',
+      'Sharp exterior visuals for businesses, venues, developments, rooftops, storefronts, and investment properties.',
   },
   {
     name: 'Construction Progress',
-    accent: 'teal',
+    icon: '⚒',
+    image: constructionImage,
     description:
-      'Repeatable site flights that make milestones, conditions, and stakeholder updates easy to see.',
+      'Repeatable drone flights that document milestones, site conditions, progress updates, and stakeholder reporting.',
   },
   {
     name: 'Events & Tourism',
-    accent: 'mint',
+    icon: '⌖',
+    image: eventsImage,
     description:
-      'Modern highlight clips for outdoor events, attractions, neighborhoods, and brand campaigns.',
+      'Modern highlight clips for outdoor events, attractions, neighborhoods, resorts, and destination marketing.',
   },
   {
     name: 'Inspections',
-    accent: 'lavender',
+    icon: '⌕',
+    image: inspectionsImage,
     description:
-      'Close visual capture for roofs, lots, towers, and hard-to-reach angles without the extra hassle.',
+      'Detailed aerial visuals for roofs, lots, towers, buildings, and hard-to-reach areas without the extra hassle.',
   },
   {
     name: 'Custom Drone Content',
-    accent: 'coral',
+    icon: '',
+    iconClass: 'video',
+    image: customContentImage,
     description:
-      'Flexible flight plans for social campaigns, promo videos, reveal shots, and one-off creative ideas.',
+      'Flexible flight plans for social campaigns, promo videos, reveal shots, FPV fly-throughs, and creative brand content.',
   },
 ]
 
+const tourService = {
+  name: '360 Tours',
+  icon: '360',
+  image: toursImage,
+  description:
+    'Interactive 120-megapixel ground and aerial 360 tours that let viewers explore properties, yachts, cars, and unique spaces in a more immersive way.',
+}
+
+const tourFeatures = [
+  { icon: '', iconClass: 'camera', title: '120 Megapixel', label: 'Ultra high resolution' },
+  { icon: '⌘', title: 'Aerial & Ground', label: 'Capture' },
+  { icon: '◎', title: 'Interactive', label: 'Experience' },
+  { icon: '', iconClass: 'phone', title: 'Access Anywhere', label: 'Anytime' },
+]
+
 const featuredStats = [
-  { value: 'PART 107', label: 'licensed' },
-  { value: '$0.5M', label: 'insured' },
-  { value: '4K', label: 'deliverables' },
-  { value: 'FAA', label: 'ready workflow' },
-  { value: 'ETN', label: 'local coverage' },
-  { value: 'EDITS', label: 'we will edit the videos & photos for your site or social media for you' },
+  {
+    title: 'Custom Solutions',
+    description: 'Tailored aerial services designed around your unique project goals.',
+    icon: '✦',
+    theme: 'dark',
+  },
+  {
+    title: 'Quality Assured',
+    description: 'High-end equipment and precise techniques deliver stunning, reliable results.',
+    icon: '✓',
+    theme: 'light',
+  },
+  {
+    title: 'Fast Turnaround',
+    description: 'Quick delivery without compromising quality, because timing matters.',
+    icon: '◴',
+    theme: 'dark',
+  },
+  {
+    title: 'Clear Communication',
+    description: 'Responsive, transparent communication every step of the way.',
+    icon: '',
+    iconClass: 'message',
+    theme: 'light',
+  },
+  {
+    title: 'Fully Licensed & Insured',
+    description: 'FAA certified with full insurance for your peace of mind.',
+    icon: '✓',
+    theme: 'dark',
+  },
 ]
 
 const bookingHref =
@@ -706,23 +761,61 @@ onUnmounted(() => {
       </section>
 
       <section class="stats-band" aria-label="Service highlights">
-        <div v-for="stat in featuredStats" :key="stat.label" class="stat-item">
-          <strong>{{ stat.value }}</strong>
-          <span>{{ stat.label }}</span>
-        </div>
+        <article
+          v-for="stat in featuredStats"
+          :key="stat.title"
+          class="stat-item"
+          :class="stat.theme"
+        >
+          <span class="stat-icon" :class="stat.iconClass" aria-hidden="true">{{ stat.icon }}</span>
+          <h2>{{ stat.title }}</h2>
+          <span class="stat-rule"></span>
+          <p>{{ stat.description }}</p>
+        </article>
       </section>
 
       <section class="services-section">
-        <div class="section-heading">
-          <h2>Everything you need from takeoff to final files.</h2>
-          <p class="eyebrow">Services</p>
+        <div class="services-heading">
+          <p class="services-kicker"><span></span>Drone Services<span></span></p>
+          <h2>
+            Aerial visuals that <strong>elevate every project</strong>
+          </h2>
+          <p>
+            Professional drone photography and videography tailored to real estate, construction,
+            businesses, and brands across East Tennessee.
+          </p>
         </div>
 
         <div class="service-grid">
-          <article v-for="service in services" :key="service.name" class="service-card" :class="service.accent">
-            <span class="service-dot"></span>
-            <h3>{{ service.name }}</h3>
-            <p>{{ service.description }}</p>
+          <article
+            v-for="service in services"
+            :key="service.name"
+            class="service-card"
+            :style="{ backgroundImage: `url(${service.image})` }"
+          >
+            <div class="service-card-content">
+              <span class="service-icon" :class="service.iconClass" aria-hidden="true">{{ service.icon }}</span>
+              <h3>{{ service.name }}</h3>
+              <span class="service-rule"></span>
+              <p>{{ service.description }}</p>
+            </div>
+          </article>
+
+          <article class="service-card service-card-wide" :style="{ backgroundImage: `url(${tourService.image})` }">
+            <div class="service-card-content">
+              <span class="service-icon service-icon-text" aria-hidden="true">{{ tourService.icon }}</span>
+              <h3>{{ tourService.name }}</h3>
+              <span class="service-rule"></span>
+              <p>{{ tourService.description }}</p>
+            </div>
+
+            <div class="tour-feature-row" aria-label="360 tour features">
+              <div v-for="feature in tourFeatures" :key="feature.title" class="tour-feature">
+                <span :class="feature.iconClass" aria-hidden="true">{{ feature.icon }}</span>
+                <strong>{{ feature.title }}</strong>
+                <small>{{ feature.label }}</small>
+              </div>
+            </div>
           </article>
         </div>
       </section>
