@@ -7,6 +7,8 @@ import {
 } from './gallery-db.js'
 import { getDriveAccessToken, getDriveClient } from './google-drive-service-account.js'
 import { requireAdmin } from './google-auth.js'
+import { Readable } from 'node:stream'
+import { pipeline } from 'node:stream/promises'
 
 const DRIVE_LIST_FIELDS =
   'nextPageToken,files(id,name,mimeType,modifiedTime,createdTime,thumbnailLink,imageMediaMetadata(width,height),videoMediaMetadata(width,height,durationMillis))'
@@ -196,25 +198,20 @@ async function handleReorderGallery(req, res) {
 }
 
 async function fetchDriveFile(id, req, env = process.env) {
-  const headers = {}
+  const accessToken = await getDriveAccessToken(env)
+  const url = new URL(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}`)
+  const headers = {
+    Authorization: `Bearer ${accessToken}`,
+  }
+
+  url.searchParams.set('alt', 'media')
+  url.searchParams.set('supportsAllDrives', 'true')
 
   if (req.headers.range) {
     headers.Range = req.headers.range
   }
 
-  const drive = getDriveClient(env)
-
-  return drive.files.get(
-    {
-      fileId: id,
-      alt: 'media',
-      supportsAllDrives: true,
-    },
-    {
-      headers,
-      responseType: 'stream',
-    },
-  )
+  return fetch(url, { headers })
 }
 
 async function handleStreamMedia(req, res, id, env = process.env) {
@@ -229,10 +226,11 @@ async function handleStreamMedia(req, res, id, env = process.env) {
     const driveResponse = await fetchDriveFile(id, req, env)
     const status = driveResponse.status || 200
 
-    if (status >= 400) {
+    if (!driveResponse.ok && status !== 206) {
+      const message = await driveResponse.text().catch(() => '')
       jsonResponse(res, status, {
         error: 'Unable to stream Google Drive media',
-        message: 'Google Drive returned an error while streaming media',
+        message: message || 'Google Drive returned an error while streaming media',
       })
       return
     }
@@ -240,7 +238,7 @@ async function handleStreamMedia(req, res, id, env = process.env) {
     const headers = {
       'Content-Type': item.mime_type || getResponseHeader(driveResponse.headers, 'content-type') || 'application/octet-stream',
       'Accept-Ranges': getResponseHeader(driveResponse.headers, 'accept-ranges') || 'bytes',
-      'Cache-Control': 'public, max-age=3600',
+      'Cache-Control': 'public, max-age=3600, no-transform',
     }
 
     for (const header of ['content-length', 'content-range']) {
@@ -253,14 +251,18 @@ async function handleStreamMedia(req, res, id, env = process.env) {
 
     res.writeHead(status, headers)
 
-    if (driveResponse.data) {
-      for await (const chunk of driveResponse.data) {
-        res.write(chunk)
-      }
+    if (driveResponse.body) {
+      await pipeline(Readable.fromWeb(driveResponse.body), res)
+      return
     }
 
     res.end()
   } catch (error) {
+    if (res.headersSent) {
+      res.destroy(error)
+      return
+    }
+
     jsonResponse(res, 503, {
       error: 'Google Drive media is not connected',
       message: getGoogleDriveErrorMessage(error, 'Unable to stream Google Drive media'),

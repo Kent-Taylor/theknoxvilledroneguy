@@ -910,7 +910,7 @@ onUnmounted(() => {
                 controls
                 autoplay
                 playsinline
-                preload="metadata"
+                preload="auto"
                 @loadstart="markMediaLoading(selectedGalleryItem.id)"
                 @waiting="markMediaLoading(selectedGalleryItem.id)"
                 @loadeddata="markMediaReady(selectedGalleryItem.id)"
@@ -1023,7 +1023,7 @@ onUnmounted(() => {
             :src="selectedAdminItem.media_url"
             controls
             playsinline
-            preload="metadata"
+            preload="auto"
             @loadstart="markMediaLoading(selectedAdminItem.id)"
             @loadeddata="markMediaReady(selectedAdminItem.id)"
             @canplay="markMediaReady(selectedAdminItem.id)"
