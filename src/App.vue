@@ -139,6 +139,10 @@ const galleryItems = ref([])
 const adminItems = ref([])
 const jobs = ref([])
 const jobApplications = ref([])
+const timeTracker = ref(null)
+const timeTrackerStatus = ref('Loading time tracker...')
+const timeSaveStatus = ref('')
+const selectedTimeClientId = ref('')
 const expandedJobIds = ref(new Set())
 const visibleGalleryCount = ref(20)
 const galleryStatus = ref('Loading gallery...')
@@ -152,6 +156,18 @@ const careersStatus = ref('')
 const applicationStatus = ref({ type: '', message: '' })
 const applicationSubmitting = ref(false)
 const jobForm = ref({ id: null, title: '', description: '' })
+const timeClientForm = ref({ id: null, name: '', monthlyPayment: 0, targetHourlyRate: 75 })
+const timeEntryForm = ref({
+  id: null,
+  clientId: '',
+  projectName: '',
+  editingStartDate: '',
+  editingEndDate: '',
+  filmingHours: 0,
+  drivingHours: 0,
+  editingHours: 0,
+  notes: '',
+})
 const jobEditor = ref(null)
 const selectedJob = ref(null)
 const applicationForm = ref({
@@ -186,6 +202,10 @@ const page = computed(() => {
     return 'careers'
   }
 
+  if (currentPath.value === '/time-tracker') {
+    return 'time-tracker'
+  }
+
   if (currentPath.value === '/privacy-policy') {
     return 'privacy'
   }
@@ -203,6 +223,21 @@ const selectedAdminItem = computed(() =>
 
 const visibleGalleryItems = computed(() => galleryItems.value.slice(0, visibleGalleryCount.value))
 const hasMoreGalleryItems = computed(() => visibleGalleryCount.value < galleryItems.value.length)
+const timeTrackerClients = computed(() => timeTracker.value?.clients || [])
+const selectedTimeClient = computed(
+  () =>
+    timeTrackerClients.value.find((client) => String(client.id) === String(selectedTimeClientId.value)) ||
+    timeTrackerClients.value[0] ||
+    null,
+)
+const timeTrackerSummary = computed(() => selectedTimeClient.value || {})
+const peakTrackerMonth = computed(() => {
+  const months = selectedTimeClient.value?.months || []
+  return months.reduce((peak, month) => (!peak || month.hours > peak.hours ? month : peak), null)
+})
+const overThresholdMonths = computed(() =>
+  (selectedTimeClient.value?.months || []).filter((month) => month.overThreshold),
+)
 const loginError = computed(() => {
   if (page.value !== 'login') {
     return ''
@@ -252,6 +287,35 @@ function formatDate(value) {
     day: 'numeric',
     year: 'numeric',
   }).format(new Date(value))
+}
+
+function formatShortDate(value) {
+  if (!value) {
+    return ''
+  }
+
+  return new Intl.DateTimeFormat('en', {
+    month: '2-digit',
+    day: '2-digit',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(`${value}T00:00:00Z`))
+}
+
+function formatHours(value) {
+  return `${Number(value || 0).toFixed(2)} hrs`
+}
+
+function formatCurrency(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return '--'
+  }
+
+  return new Intl.NumberFormat('en', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 2,
+  }).format(value)
 }
 
 async function fetchJson(url, options = {}) {
@@ -337,10 +401,156 @@ async function loadAdminGallery() {
   if (!selectedAdminItemId.value && adminItems.value.length) {
     selectedAdminItemId.value = adminItems.value[0].id
   }
+
+  await loadTimeTracker()
 }
 
 async function loadJobs() {
   jobs.value = await fetchJson('/api/jobs').catch(() => [])
+}
+
+async function loadTimeTracker() {
+  timeTrackerStatus.value = 'Loading time tracker...'
+
+  try {
+    timeTracker.value = await fetchJson('/api/time-tracker')
+    if (
+      !selectedTimeClientId.value ||
+      !timeTracker.value.clients.some((client) => String(client.id) === String(selectedTimeClientId.value))
+    ) {
+      selectedTimeClientId.value = timeTracker.value.clients[0]?.id || ''
+    }
+    if (!timeEntryForm.value.clientId) {
+      timeEntryForm.value.clientId = selectedTimeClientId.value || ''
+    }
+    timeTrackerStatus.value = ''
+  } catch (error) {
+    timeTracker.value = null
+    timeTrackerStatus.value = error.message
+  }
+}
+
+function resetTimeClientForm() {
+  timeClientForm.value = { id: null, name: '', monthlyPayment: 0, targetHourlyRate: 75 }
+}
+
+function editTimeClient(client) {
+  timeClientForm.value = {
+    id: client.id,
+    name: client.name,
+    monthlyPayment: client.monthlyPayment,
+    targetHourlyRate: client.targetHourlyRate,
+  }
+}
+
+async function saveTimeClient() {
+  timeSaveStatus.value = timeClientForm.value.id ? 'Updating client...' : 'Adding client...'
+
+  try {
+    const isEditing = Boolean(timeClientForm.value.id)
+    const saved = await fetchJson(
+      isEditing
+        ? `/api/time-tracker/clients/${timeClientForm.value.id}`
+        : '/api/time-tracker/clients',
+      {
+        method: isEditing ? 'PATCH' : 'POST',
+        body: JSON.stringify(timeClientForm.value),
+      },
+    )
+
+    selectedTimeClientId.value = saved.id
+    timeEntryForm.value.clientId = saved.id
+    resetTimeClientForm()
+    await loadTimeTracker()
+    timeSaveStatus.value = isEditing ? 'Client updated' : 'Client added'
+  } catch (error) {
+    timeSaveStatus.value = error.message
+  }
+}
+
+async function removeTimeClient(client) {
+  timeSaveStatus.value = `Deleting ${client.name}...`
+
+  try {
+    await fetchJson(`/api/time-tracker/clients/${client.id}`, { method: 'DELETE' })
+    if (String(selectedTimeClientId.value) === String(client.id)) {
+      selectedTimeClientId.value = ''
+    }
+    resetTimeClientForm()
+    resetTimeEntryForm()
+    await loadTimeTracker()
+    timeSaveStatus.value = 'Client deleted'
+  } catch (error) {
+    timeSaveStatus.value = error.message
+  }
+}
+
+function resetTimeEntryForm() {
+  timeEntryForm.value = {
+    id: null,
+    clientId: selectedTimeClientId.value || selectedTimeClient.value?.id || '',
+    projectName: '',
+    editingStartDate: '',
+    editingEndDate: '',
+    filmingHours: 0,
+    drivingHours: 0,
+    editingHours: 0,
+    notes: '',
+  }
+}
+
+function editTimeEntry(entry) {
+  selectedTimeClientId.value = entry.clientId
+  timeEntryForm.value = {
+    id: entry.id,
+    clientId: entry.clientId,
+    projectName: entry.projectName,
+    editingStartDate: entry.editingStartDate,
+    editingEndDate: entry.editingEndDate,
+    filmingHours: entry.filmingHours,
+    drivingHours: entry.drivingHours,
+    editingHours: entry.editingHours,
+    notes: entry.notes,
+  }
+}
+
+async function saveTimeEntry() {
+  timeSaveStatus.value = timeEntryForm.value.id ? 'Updating entry...' : 'Adding entry...'
+
+  try {
+    const isEditing = Boolean(timeEntryForm.value.id)
+    await fetchJson(
+      isEditing
+        ? `/api/time-tracker/entries/${timeEntryForm.value.id}`
+        : '/api/time-tracker/entries',
+      {
+        method: isEditing ? 'PATCH' : 'POST',
+        body: JSON.stringify(timeEntryForm.value),
+      },
+    )
+
+    selectedTimeClientId.value = timeEntryForm.value.clientId
+    resetTimeEntryForm()
+    await loadTimeTracker()
+    timeSaveStatus.value = isEditing ? 'Entry updated' : 'Entry added'
+  } catch (error) {
+    timeSaveStatus.value = error.message
+  }
+}
+
+async function removeTimeEntry(entry) {
+  timeSaveStatus.value = `Deleting ${entry.projectName}...`
+
+  try {
+    await fetchJson(`/api/time-tracker/entries/${entry.id}`, { method: 'DELETE' })
+    if (timeEntryForm.value.id === entry.id) {
+      resetTimeEntryForm()
+    }
+    await loadTimeTracker()
+    timeSaveStatus.value = 'Entry deleted'
+  } catch (error) {
+    timeSaveStatus.value = error.message
+  }
 }
 
 function resetJobForm() {
@@ -732,6 +942,22 @@ onUnmounted(() => {
       <button :class="{ active: page === 'gallery' }" type="button" @click="navigate('/gallery')">
         Gallery
       </button>
+      <button
+        v-if="authStatus.loggedIn"
+        :class="{ active: page === 'login' }"
+        type="button"
+        @click="navigate('/login')"
+      >
+        Edit Gallery
+      </button>
+      <button
+        v-if="authStatus.loggedIn"
+        :class="{ active: page === 'time-tracker' }"
+        type="button"
+        @click="navigate('/time-tracker')"
+      >
+        Time Tracker
+      </button>
       <a v-if="authStatus.loggedIn" class="logout-link" href="/api/google/auth/logout">Log out</a>
     </nav>
   </header>
@@ -1066,6 +1292,276 @@ onUnmounted(() => {
             </label>
           </div>
         </section>
+      </section>
+    </section>
+
+    <section v-if="page === 'time-tracker'" class="time-tracker-page">
+      <section class="page-title">
+        <p class="eyebrow">Private dashboard</p>
+        <h1>Carly Hours</h1>
+        <p>
+          Monthly video hours for Builds By Carly, including the pay threshold for when the work
+          drops below your target hourly rate.
+        </p>
+      </section>
+
+      <section v-if="!authStatus.loggedIn" class="integration-note time-login-note">
+        <h2>Admin login required</h2>
+        <p>Sign in to view the private time tracker and Carly pay math.</p>
+        <div class="hero-actions">
+          <a class="primary-action" href="/api/google/auth/start">Sign in with Google</a>
+        </div>
+      </section>
+
+      <section v-else-if="timeTrackerStatus" class="integration-note time-login-note">
+        <h2>Tracker status</h2>
+        <p>{{ timeTrackerStatus }}</p>
+      </section>
+
+      <section v-else-if="selectedTimeClient" class="time-dashboard">
+        <section class="time-admin-grid">
+          <form class="time-admin-panel" @submit.prevent="saveTimeClient">
+            <div>
+              <p class="eyebrow">Clients</p>
+              <h2>{{ timeClientForm.id ? 'Edit client' : 'Add client' }}</h2>
+              <p>{{ timeSaveStatus || 'Create clients and set their monthly pay target.' }}</p>
+            </div>
+            <label>
+              Active client
+              <select
+                v-model="selectedTimeClientId"
+                @change="timeEntryForm.clientId = selectedTimeClientId"
+              >
+                <option v-for="client in timeTrackerClients" :key="client.id" :value="client.id">
+                  {{ client.name }}
+                </option>
+              </select>
+            </label>
+            <label>
+              Client name
+              <input v-model="timeClientForm.name" required />
+            </label>
+            <div class="time-form-row">
+              <label>
+                Monthly payment
+                <input v-model.number="timeClientForm.monthlyPayment" min="0" step="0.01" type="number" />
+              </label>
+              <label>
+                Target hourly rate
+                <input v-model.number="timeClientForm.targetHourlyRate" min="1" step="0.01" type="number" />
+              </label>
+            </div>
+            <div class="hero-actions">
+              <button class="primary-action" type="submit">Save client</button>
+              <button class="secondary-action" type="button" @click="resetTimeClientForm">Clear</button>
+            </div>
+            <div class="time-client-actions">
+              <button
+                v-for="client in timeTrackerClients"
+                :key="client.id"
+                class="secondary-action compact"
+                type="button"
+                @click="editTimeClient(client)"
+              >
+                Edit {{ client.name }}
+              </button>
+              <button
+                v-if="selectedTimeClient && timeTrackerClients.length > 1"
+                class="secondary-action compact danger-action"
+                type="button"
+                @click="removeTimeClient(selectedTimeClient)"
+              >
+                Delete active client
+              </button>
+            </div>
+          </form>
+
+          <form class="time-admin-panel" @submit.prevent="saveTimeEntry">
+            <div>
+              <p class="eyebrow">Projects</p>
+              <h2>{{ timeEntryForm.id ? 'Edit project hours' : 'Add project hours' }}</h2>
+              <p>Log filming, driving, editing, dates, and notes for any client.</p>
+            </div>
+            <label>
+              Client
+              <select v-model="timeEntryForm.clientId" required>
+                <option v-for="client in timeTrackerClients" :key="client.id" :value="client.id">
+                  {{ client.name }}
+                </option>
+              </select>
+            </label>
+            <label>
+              Project or video name
+              <input v-model="timeEntryForm.projectName" required />
+            </label>
+            <div class="time-form-row">
+              <label>
+                Start date
+                <input v-model="timeEntryForm.editingStartDate" required type="date" />
+              </label>
+              <label>
+                End date
+                <input v-model="timeEntryForm.editingEndDate" type="date" />
+              </label>
+            </div>
+            <div class="time-form-row three">
+              <label>
+                Filming
+                <input v-model.number="timeEntryForm.filmingHours" min="0" step="0.25" type="number" />
+              </label>
+              <label>
+                Driving
+                <input v-model.number="timeEntryForm.drivingHours" min="0" step="0.25" type="number" />
+              </label>
+              <label>
+                Editing
+                <input v-model.number="timeEntryForm.editingHours" min="0" step="0.25" type="number" />
+              </label>
+            </div>
+            <label>
+              Notes
+              <textarea v-model="timeEntryForm.notes" rows="3"></textarea>
+            </label>
+            <div class="hero-actions">
+              <button class="primary-action" type="submit">Save project</button>
+              <button class="secondary-action" type="button" @click="resetTimeEntryForm">Clear</button>
+            </div>
+          </form>
+        </section>
+
+        <div class="time-summary-grid">
+          <article class="time-summary-card is-featured">
+            <span>Break-even threshold</span>
+            <strong>{{ formatHours(timeTrackerSummary.thresholdHours) }}</strong>
+            <p>
+              Based on {{ formatCurrency(timeTrackerSummary.monthlyPayment) }} per month at
+              {{ formatCurrency(timeTrackerSummary.targetHourlyRate) }}/hr.
+            </p>
+          </article>
+          <article class="time-summary-card">
+            <span>Total {{ timeTrackerSummary.name }} hours</span>
+            <strong>{{ formatHours(timeTrackerSummary.totalHours) }}</strong>
+            <p>{{ timeTrackerSummary.entries?.length || 0 }} logged project entries.</p>
+          </article>
+          <article class="time-summary-card">
+            <span>Average effective rate</span>
+            <strong>{{ formatCurrency(timeTrackerSummary.averageEffectiveHourlyRate) }}/hr</strong>
+            <p>Across months with logged Carly work.</p>
+          </article>
+          <article class="time-summary-card">
+            <span>Highest month</span>
+            <strong>{{ peakTrackerMonth ? formatHours(peakTrackerMonth.hours) : '--' }}</strong>
+            <p>{{ peakTrackerMonth?.label || 'No month logged yet' }}</p>
+          </article>
+        </div>
+
+        <section class="time-insight-band">
+          <div>
+            <p class="eyebrow">What this means</p>
+            <h2>
+              The {{ formatHours(timeTrackerSummary.thresholdHours) }} threshold is per month.
+            </h2>
+          </div>
+          <p>
+            {{ overThresholdMonths.length }} month{{ overThresholdMonths.length === 1 ? '' : 's' }}
+            are over the target. The dashboard assigns work to the month of the editing start date,
+            so cross-month projects count in the month they started.
+          </p>
+        </section>
+
+        <section class="time-months" aria-label="Monthly client hours">
+          <article
+            v-for="month in timeTrackerSummary.months"
+            :key="month.key"
+            class="time-month-card"
+            :class="{ 'is-over': month.overThreshold }"
+          >
+            <div class="time-month-header">
+              <div>
+                <h3>{{ month.label }}</h3>
+                <span>{{ month.projects }} project{{ month.projects === 1 ? '' : 's' }}</span>
+              </div>
+              <strong>{{ formatCurrency(month.effectiveHourlyRate) }}/hr</strong>
+            </div>
+            <div class="time-bar-track" aria-hidden="true">
+              <span
+                class="time-bar"
+                :style="{ width: `${Math.min((month.hours / timeTrackerSummary.thresholdHours) * 100, 100)}%` }"
+              ></span>
+            </div>
+            <p>
+              {{ formatHours(month.hours) }}
+              <span v-if="month.overThreshold">
+                , {{ formatHours(month.thresholdDelta) }} over target
+              </span>
+              <span v-else>
+                , {{ formatHours(Math.abs(month.thresholdDelta)) }} under target
+              </span>
+            </p>
+          </article>
+        </section>
+
+        <section class="time-table-wrap" aria-label="Client project entries">
+          <div class="time-table-heading">
+            <div>
+              <p class="eyebrow">Source entries</p>
+              <h2>{{ timeTrackerSummary.name }} projects</h2>
+            </div>
+            <p>Entries are stored in the site database and update this dashboard automatically.</p>
+          </div>
+          <div class="time-table-scroll">
+            <table class="time-table">
+              <thead>
+                <tr>
+                  <th>Project</th>
+                  <th>Start</th>
+                  <th>End</th>
+                  <th>Filming</th>
+                  <th>Driving</th>
+                  <th>Editing</th>
+                  <th>Total</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="entry in timeTrackerSummary.entries" :key="entry.id">
+                  <td>
+                    <strong>{{ entry.projectName }}</strong>
+                    <span v-if="entry.notes">{{ entry.notes }}</span>
+                  </td>
+                  <td>{{ formatShortDate(entry.editingStartDate) }}</td>
+                  <td>{{ formatShortDate(entry.editingEndDate) }}</td>
+                  <td>{{ formatHours(entry.filmingHours) }}</td>
+                  <td>{{ formatHours(entry.drivingHours) }}</td>
+                  <td>{{ formatHours(entry.editingHours) }}</td>
+                  <td>{{ formatHours(entry.totalHours) }}</td>
+                  <td>
+                    <div class="time-row-actions">
+                      <button class="secondary-action compact" type="button" @click="editTimeEntry(entry)">
+                        Edit
+                      </button>
+                      <button
+                        class="secondary-action compact danger-action"
+                        type="button"
+                        @click="removeTimeEntry(entry)"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+                <tr v-if="!timeTrackerSummary.entries?.length">
+                  <td colspan="8">No project entries for this client yet.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <section v-else class="integration-note time-login-note">
+        <h2>No clients yet</h2>
+        <p>Add your first client to start tracking project hours.</p>
       </section>
     </section>
 

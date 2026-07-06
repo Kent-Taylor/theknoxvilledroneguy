@@ -11,6 +11,7 @@ import {
   handleGoogleAuthStatus,
   handleGoogleLogout,
 } from './google-auth.js'
+import { handleTimeTrackerApi } from './time-tracker-api.js'
 import {
   handleInstagramAuthCallback,
   handleInstagramAuthRefresh,
@@ -90,6 +91,10 @@ const server = createServer(async (req, res) => {
   }
 
   if (await handleCareersApi(req, res)) {
+    return
+  }
+
+  if (await handleTimeTrackerApi(req, res)) {
     return
   }
 

@@ -1225,6 +1225,306 @@ h3 {
   padding-top: 32px;
 }
 
+.time-tracker-page {
+  padding-top: 32px;
+}
+
+.time-login-note {
+  width: min(980px, calc(100% - 32px));
+  margin: 0 auto;
+}
+
+.time-dashboard {
+  display: grid;
+  gap: 28px;
+  width: min(1160px, calc(100% - 32px));
+  margin: 0 auto;
+}
+
+.time-admin-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.1fr);
+  gap: 18px;
+}
+
+.time-admin-panel {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  padding: 26px;
+  border: 1px solid rgba(3, 3, 3, 0.08);
+  background: var(--blush);
+  box-shadow: 0 14px 36px rgba(83, 54, 62, 0.09);
+}
+
+.time-admin-panel h2 {
+  font-size: clamp(1.7rem, 2.8vw, 2.6rem);
+}
+
+.time-admin-panel p {
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.time-admin-panel label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--black);
+  font-weight: 800;
+}
+
+.time-admin-panel input,
+.time-admin-panel select,
+.time-admin-panel textarea {
+  width: 100%;
+  min-height: 46px;
+  padding: 10px 12px;
+  color: var(--ink);
+  font: inherit;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 0;
+}
+
+.time-admin-panel textarea {
+  resize: vertical;
+}
+
+.time-form-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.time-form-row.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.time-client-actions,
+.time-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.time-client-actions {
+  padding-top: 8px;
+  border-top: 1px solid rgba(3, 3, 3, 0.08);
+}
+
+.danger-action {
+  color: white;
+  background: #7f1d1d;
+}
+
+.time-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.time-summary-card,
+.time-insight-band,
+.time-month-card,
+.time-table-wrap {
+  border: 1px solid rgba(3, 3, 3, 0.08);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 14px 36px rgba(83, 54, 62, 0.09);
+}
+
+.time-summary-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 188px;
+  padding: 22px;
+  border-top: 3px solid var(--gold);
+}
+
+.time-summary-card.is-featured {
+  color: white;
+  background:
+    linear-gradient(145deg, rgba(216, 163, 41, 0.16), transparent 42%),
+    var(--black);
+}
+
+.time-summary-card span,
+.time-month-header span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.time-summary-card.is-featured span,
+.time-summary-card.is-featured p {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.time-summary-card strong {
+  display: block;
+  margin: 12px 0;
+  color: var(--black);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(2rem, 3vw, 3.1rem);
+  line-height: 1;
+}
+
+.time-summary-card.is-featured strong {
+  color: var(--gold);
+}
+
+.time-summary-card p {
+  margin: auto 0 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.time-insight-band {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.95fr) minmax(0, 1.05fr);
+  gap: 24px;
+  align-items: center;
+  padding: 30px;
+  background: var(--blush);
+}
+
+.time-insight-band h2,
+.time-table-heading h2 {
+  font-size: clamp(1.9rem, 3vw, 3rem);
+}
+
+.time-insight-band p:last-child,
+.time-table-heading p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.time-months {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.time-month-card {
+  padding: 22px;
+}
+
+.time-month-card.is-over {
+  border-top: 3px solid #b45309;
+}
+
+.time-month-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.time-month-header h3 {
+  margin-bottom: 6px;
+  font-size: 1.45rem;
+}
+
+.time-month-header strong {
+  color: var(--leaf);
+  font-size: 0.95rem;
+  white-space: nowrap;
+}
+
+.time-bar-track {
+  height: 12px;
+  margin: 18px 0 12px;
+  overflow: hidden;
+  background: #f1e6d3;
+  border: 1px solid rgba(3, 3, 3, 0.08);
+}
+
+.time-bar {
+  display: block;
+  height: 100%;
+  background: var(--teal);
+}
+
+.time-month-card.is-over .time-bar {
+  background: var(--gold);
+}
+
+.time-month-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.time-table-wrap {
+  overflow: hidden;
+}
+
+.time-table-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 26px;
+  background: white;
+  border-bottom: 1px solid var(--line);
+}
+
+.time-table-heading p {
+  max-width: 460px;
+}
+
+.time-table-scroll {
+  overflow-x: auto;
+}
+
+.time-table {
+  width: 100%;
+  min-width: 980px;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.time-table th,
+.time-table td {
+  padding: 14px 16px;
+  text-align: right;
+  border-bottom: 1px solid var(--line);
+}
+
+.time-table th:first-child,
+.time-table td:first-child {
+  width: 34%;
+  text-align: left;
+}
+
+.time-table th {
+  color: var(--black);
+  font-size: 0.7rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  background: var(--blush);
+}
+
+.time-table td {
+  color: var(--ink);
+}
+
+.time-table td strong,
+.time-table td span {
+  display: block;
+}
+
+.time-table td span {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
 .legal-page {
   padding-top: 32px;
 }
@@ -2057,6 +2357,18 @@ code {
   .admin-layout {
     display: flex;
   }
+
+  .time-summary-grid,
+  .time-admin-grid,
+  .time-months,
+  .time-insight-band {
+    grid-template-columns: 1fr;
+  }
+
+  .time-table-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 
 @media (max-width: 520px) {
@@ -2186,6 +2498,23 @@ code {
   .application-fields {
     grid-template-columns: 1fr;
     padding: 18px;
+  }
+
+  .time-dashboard {
+    width: min(100% - 20px, 1160px);
+  }
+
+  .time-summary-card,
+  .time-admin-panel,
+  .time-insight-band,
+  .time-month-card,
+  .time-table-heading {
+    padding: 20px;
+  }
+
+  .time-form-row,
+  .time-form-row.three {
+    grid-template-columns: 1fr;
   }
 
   .hero-actions,

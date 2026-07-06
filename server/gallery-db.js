@@ -144,10 +144,35 @@ function getDb() {
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
       );
+
+      CREATE TABLE IF NOT EXISTS time_clients (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        monthly_payment REAL NOT NULL DEFAULT 0,
+        target_hourly_rate REAL NOT NULL DEFAULT 75,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS time_entries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        client_id INTEGER NOT NULL,
+        project_name TEXT NOT NULL,
+        editing_start_date TEXT NOT NULL,
+        editing_end_date TEXT,
+        filming_hours REAL NOT NULL DEFAULT 0,
+        driving_hours REAL NOT NULL DEFAULT 0,
+        editing_hours REAL NOT NULL DEFAULT 0,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (client_id) REFERENCES time_clients(id) ON DELETE CASCADE
+      );
     `)
 
     migrateGalleryItems()
     migrateJobApplications()
+    seedTimeTracker()
 
     const count = db.prepare('SELECT COUNT(*) AS count FROM gallery_items').get().count
 
@@ -206,6 +231,64 @@ function migrateGalleryItems() {
     if (!columns.includes(columnName)) {
       getDb().exec(statement)
     }
+  }
+}
+
+const carlyTimeSeedEntries = [
+  ['Tiny home tour compilation', '2026-05-11', '2026-05-19', 0, 0, 15, ''],
+  ['Trees/ Site prep LF (Blue Bird)', '2026-05-19', '2026-05-22', 3, 2.5, 3.5, ''],
+  ['Raw Shady Oaks Video (all 3 parts)', '2026-05-15', '2026-06-26', 4, 2.5, 14.5, ''],
+  ['Trees site prep teaser video', '2026-05-23', '2026-05-23', 0, 0, 1, ''],
+  ['THT Tree costs', '2026-05-23', '2026-05-24', 0.25, 0, 3.25, ''],
+  ['Luxury Bathrooms', '2026-06-06', '2026-06-07', 0, 0, 2.5, ''],
+  ['Outdoor Spaces', '2026-06-21', '2026-06-22', 0, 0, 3.5, ''],
+  ['Bob Hollow Short', '2026-06-17', '2026-06-17', 0, 0, 1, ''],
+  ['Bob Hollow Property Tour', '2026-06-16', '2026-06-16', 0, 0, 3.5, ''],
+  ['Bob Hollow Tour Teaser', '2026-06-17', '2026-06-17', 0, 0, 1, ''],
+  ['Tour Compilation Short', '2026-05-29', '2026-05-29', 0, 0, 2, ''],
+  [
+    'Tiny House Kitchens',
+    '2026-06-26',
+    '2026-06-28',
+    3,
+    2,
+    4,
+    'Extra time from manually searching Google Drive for all 7 videos, plus driving and voice over time.',
+  ],
+  ['Amy Part 2', '2026-06-28', '2026-07-02', 1, 2, 7, ''],
+]
+
+function seedTimeTracker() {
+  const database = getDb()
+  const count = database.prepare('SELECT COUNT(*) AS count FROM time_clients').get().count
+
+  if (count > 0) {
+    return
+  }
+
+  const clientResult = database
+    .prepare('INSERT INTO time_clients (name, monthly_payment, target_hourly_rate) VALUES (?, ?, ?)')
+    .run('Builds By Carly', 1600, 75)
+  const clientId = clientResult.lastInsertRowid
+  const insertEntry = database.prepare(
+    `
+      INSERT INTO time_entries
+        (
+          client_id,
+          project_name,
+          editing_start_date,
+          editing_end_date,
+          filming_hours,
+          driving_hours,
+          editing_hours,
+          notes
+        )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+  )
+
+  for (const entry of carlyTimeSeedEntries) {
+    insertEntry.run(clientId, ...entry)
   }
 }
 
@@ -622,12 +705,306 @@ function getJobApplications() {
     .map(mapJobApplication)
 }
 
+function getMonthKey(dateString) {
+  return String(dateString || '').slice(0, 7)
+}
+
+function getMonthLabel(monthKey) {
+  const [year, month] = String(monthKey || '')
+    .split('-')
+    .map(Number)
+
+  if (!year || !month) {
+    return 'No month'
+  }
+
+  return new Intl.DateTimeFormat('en', {
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(Date.UTC(year, month - 1, 1)))
+}
+
+function mapTimeClient(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    monthlyPayment: Number(row.monthly_payment) || 0,
+    targetHourlyRate: Number(row.target_hourly_rate) || 0,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+function mapTimeEntry(row) {
+  const filmingHours = Number(row.filming_hours) || 0
+  const drivingHours = Number(row.driving_hours) || 0
+  const editingHours = Number(row.editing_hours) || 0
+
+  return {
+    id: row.id,
+    clientId: row.client_id,
+    clientName: row.client_name || '',
+    projectName: row.project_name,
+    editingStartDate: row.editing_start_date,
+    editingEndDate: row.editing_end_date || '',
+    filmingHours,
+    drivingHours,
+    editingHours,
+    totalHours: filmingHours + drivingHours + editingHours,
+    notes: row.notes || '',
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+function getTimeClients() {
+  return getDb()
+    .prepare('SELECT * FROM time_clients ORDER BY name COLLATE NOCASE ASC, id ASC')
+    .all()
+    .map(mapTimeClient)
+}
+
+function getTimeClient(id) {
+  const row = getDb().prepare('SELECT * FROM time_clients WHERE id = ?').get(id)
+  return row ? mapTimeClient(row) : null
+}
+
+function createTimeClient({ name, monthlyPayment, targetHourlyRate }) {
+  const result = getDb()
+    .prepare(
+      `
+        INSERT INTO time_clients (name, monthly_payment, target_hourly_rate)
+        VALUES (?, ?, ?)
+      `,
+    )
+    .run(name, monthlyPayment, targetHourlyRate)
+
+  return getTimeClient(result.lastInsertRowid)
+}
+
+function updateTimeClient(id, { name, monthlyPayment, targetHourlyRate }) {
+  const existing = getTimeClient(id)
+
+  if (!existing) {
+    return null
+  }
+
+  getDb()
+    .prepare(
+      `
+        UPDATE time_clients
+        SET name = ?, monthly_payment = ?, target_hourly_rate = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `,
+    )
+    .run(
+      name ?? existing.name,
+      monthlyPayment ?? existing.monthlyPayment,
+      targetHourlyRate ?? existing.targetHourlyRate,
+      id,
+    )
+
+  return getTimeClient(id)
+}
+
+function deleteTimeClient(id) {
+  const result = getDb().prepare('DELETE FROM time_clients WHERE id = ?').run(id)
+  return result.changes > 0
+}
+
+function getTimeEntries({ clientId } = {}) {
+  const params = []
+  let whereClause = ''
+
+  if (clientId) {
+    whereClause = 'WHERE time_entries.client_id = ?'
+    params.push(clientId)
+  }
+
+  return getDb()
+    .prepare(
+      `
+        SELECT
+          time_entries.*,
+          time_clients.name AS client_name
+        FROM time_entries
+        JOIN time_clients ON time_clients.id = time_entries.client_id
+        ${whereClause}
+        ORDER BY time_entries.editing_start_date DESC, time_entries.id DESC
+      `,
+    )
+    .all(...params)
+    .map(mapTimeEntry)
+}
+
+function getTimeEntry(id) {
+  const row = getDb()
+    .prepare(
+      `
+        SELECT
+          time_entries.*,
+          time_clients.name AS client_name
+        FROM time_entries
+        JOIN time_clients ON time_clients.id = time_entries.client_id
+        WHERE time_entries.id = ?
+      `,
+    )
+    .get(id)
+
+  return row ? mapTimeEntry(row) : null
+}
+
+function createTimeEntry(payload) {
+  const result = getDb()
+    .prepare(
+      `
+        INSERT INTO time_entries
+          (
+            client_id,
+            project_name,
+            editing_start_date,
+            editing_end_date,
+            filming_hours,
+            driving_hours,
+            editing_hours,
+            notes
+          )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+    )
+    .run(
+      payload.clientId,
+      payload.projectName,
+      payload.editingStartDate,
+      payload.editingEndDate || '',
+      payload.filmingHours,
+      payload.drivingHours,
+      payload.editingHours,
+      payload.notes || '',
+    )
+
+  return getTimeEntry(result.lastInsertRowid)
+}
+
+function updateTimeEntry(id, payload) {
+  const existing = getTimeEntry(id)
+
+  if (!existing) {
+    return null
+  }
+
+  getDb()
+    .prepare(
+      `
+        UPDATE time_entries
+        SET
+          client_id = ?,
+          project_name = ?,
+          editing_start_date = ?,
+          editing_end_date = ?,
+          filming_hours = ?,
+          driving_hours = ?,
+          editing_hours = ?,
+          notes = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `,
+    )
+    .run(
+      payload.clientId ?? existing.clientId,
+      payload.projectName ?? existing.projectName,
+      payload.editingStartDate ?? existing.editingStartDate,
+      payload.editingEndDate ?? existing.editingEndDate,
+      payload.filmingHours ?? existing.filmingHours,
+      payload.drivingHours ?? existing.drivingHours,
+      payload.editingHours ?? existing.editingHours,
+      payload.notes ?? existing.notes,
+      id,
+    )
+
+  return getTimeEntry(id)
+}
+
+function deleteTimeEntry(id) {
+  const result = getDb().prepare('DELETE FROM time_entries WHERE id = ?').run(id)
+  return result.changes > 0
+}
+
+function summarizeTimeClient(client, entries) {
+  const thresholdHours =
+    client.targetHourlyRate > 0 ? client.monthlyPayment / client.targetHourlyRate : 0
+  const monthMap = new Map()
+
+  for (const entry of entries) {
+    const monthKey = getMonthKey(entry.editingStartDate)
+    const month = monthMap.get(monthKey) || {
+      key: monthKey,
+      label: getMonthLabel(monthKey),
+      hours: 0,
+      projects: 0,
+    }
+
+    month.hours += entry.totalHours
+    month.projects += 1
+    monthMap.set(monthKey, month)
+  }
+
+  const months = [...monthMap.values()]
+    .sort((a, b) => a.key.localeCompare(b.key))
+    .map((month) => ({
+      ...month,
+      effectiveHourlyRate: month.hours ? client.monthlyPayment / month.hours : null,
+      thresholdDelta: month.hours - thresholdHours,
+      overThreshold: thresholdHours > 0 ? month.hours > thresholdHours : false,
+    }))
+
+  const totalHours = entries.reduce((sum, entry) => sum + entry.totalHours, 0)
+  const activeMonths = months.filter((month) => month.hours > 0).length
+
+  return {
+    ...client,
+    thresholdHours,
+    totalHours,
+    projectCount: entries.length,
+    averageEffectiveHourlyRate: activeMonths ? client.monthlyPayment / (totalHours / activeMonths) : null,
+    lastEntry: entries[0] || null,
+    months,
+    entries,
+  }
+}
+
+function getTimeTrackerDashboard() {
+  const clients = getTimeClients()
+  const entries = getTimeEntries()
+  const entriesByClient = new Map()
+
+  for (const entry of entries) {
+    entriesByClient.set(entry.clientId, [...(entriesByClient.get(entry.clientId) || []), entry])
+  }
+
+  const clientSummaries = clients.map((client) =>
+    summarizeTimeClient(client, entriesByClient.get(client.id) || []),
+  )
+  const totalHours = clientSummaries.reduce((sum, client) => sum + client.totalHours, 0)
+
+  return {
+    clients: clientSummaries,
+    totalHours,
+    entryCount: entries.length,
+  }
+}
+
 export {
   createJob,
   createJobApplication,
   createAdminSession,
+  createTimeClient,
+  createTimeEntry,
   deleteAdminSession,
   deleteJob,
+  deleteTimeClient,
+  deleteTimeEntry,
   getFirstGalleryItem,
   getAdminSession,
   getGalleryItem,
@@ -636,9 +1013,16 @@ export {
   getJobApplication,
   getJobApplications,
   getJobs,
+  getTimeClient,
+  getTimeClients,
+  getTimeEntry,
+  getTimeEntries,
+  getTimeTrackerDashboard,
   reorderGalleryItems,
   syncGalleryItems,
   updateJobApplicationNotification,
   updateJob,
   updateGalleryItem,
+  updateTimeClient,
+  updateTimeEntry,
 }
