@@ -1326,6 +1326,7 @@ h3 {
 
 .time-summary-card,
 .time-insight-band,
+.time-chart-card,
 .time-month-card,
 .time-table-wrap {
   border: 1px solid rgba(3, 3, 3, 0.08);
@@ -1456,6 +1457,72 @@ h3 {
   margin: 0;
   color: var(--muted);
   line-height: 1.5;
+}
+
+.time-chart-card {
+  overflow: hidden;
+}
+
+.time-week-chart {
+  display: grid;
+  gap: 12px;
+  padding: 24px 26px 28px;
+}
+
+.time-week-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.9fr) minmax(180px, 1.4fr) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.time-week-row:last-child {
+  border-bottom: 0;
+}
+
+.time-week-label {
+  display: grid;
+  gap: 4px;
+}
+
+.time-week-label strong,
+.time-week-hours {
+  color: var(--black);
+  font-weight: 900;
+}
+
+.time-week-label span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.time-week-bar-track {
+  height: 16px;
+  overflow: hidden;
+  background: #f1e6d3;
+  border: 1px solid rgba(3, 3, 3, 0.08);
+}
+
+.time-week-bar {
+  display: block;
+  height: 100%;
+  background:
+    linear-gradient(90deg, var(--gold), #f3cf72 52%, var(--gold-dark));
+}
+
+.time-week-hours {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.empty-chart-note {
+  padding: 0 26px 28px;
+  color: var(--muted);
 }
 
 .time-table-wrap {
@@ -2368,6 +2435,15 @@ code {
   .time-table-heading {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .time-week-row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .time-week-hours {
+    text-align: left;
   }
 }
 

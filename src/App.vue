@@ -238,6 +238,41 @@ const peakTrackerMonth = computed(() => {
 const overThresholdMonths = computed(() =>
   (selectedTimeClient.value?.months || []).filter((month) => month.overThreshold),
 )
+const weeklyTrackerHours = computed(() => {
+  const weekMap = new Map()
+
+  for (const entry of selectedTimeClient.value?.entries || []) {
+    const week = getWeekBucket(entry.editingStartDate)
+
+    if (!week) {
+      continue
+    }
+
+    const currentWeek = weekMap.get(week.key) || {
+      ...week,
+      hours: 0,
+      projects: 0,
+    }
+
+    currentWeek.hours += Number(entry.totalHours) || 0
+    currentWeek.projects += 1
+    weekMap.set(week.key, currentWeek)
+  }
+
+  return [...weekMap.values()].sort((a, b) => a.key.localeCompare(b.key))
+})
+const peakTrackerWeek = computed(() =>
+  weeklyTrackerHours.value.reduce((peak, week) => (!peak || week.hours > peak.hours ? week : peak), null),
+)
+const averageWeeklyHours = computed(() => {
+  const activeWeeks = weeklyTrackerHours.value.filter((week) => week.hours > 0)
+  const totalHours = activeWeeks.reduce((sum, week) => sum + week.hours, 0)
+
+  return activeWeeks.length ? totalHours / activeWeeks.length : 0
+})
+const maxWeeklyHours = computed(() =>
+  weeklyTrackerHours.value.reduce((max, week) => Math.max(max, week.hours), 0),
+)
 const loginError = computed(() => {
   if (page.value !== 'login') {
     return ''
@@ -300,6 +335,30 @@ function formatShortDate(value) {
     year: 'numeric',
     timeZone: 'UTC',
   }).format(new Date(`${value}T00:00:00Z`))
+}
+
+function getWeekBucket(value) {
+  if (!value) {
+    return null
+  }
+
+  const date = new Date(`${value}T00:00:00Z`)
+
+  if (Number.isNaN(date.getTime())) {
+    return null
+  }
+
+  const day = date.getUTCDay()
+  const mondayOffset = day === 0 ? -6 : 1 - day
+  const start = new Date(date)
+  start.setUTCDate(date.getUTCDate() + mondayOffset)
+  const end = new Date(start)
+  end.setUTCDate(start.getUTCDate() + 6)
+
+  return {
+    key: start.toISOString().slice(0, 10),
+    label: `${formatShortDate(start.toISOString().slice(0, 10))} - ${formatShortDate(end.toISOString().slice(0, 10))}`,
+  }
 }
 
 function formatHours(value) {
@@ -1431,8 +1490,8 @@ onUnmounted(() => {
 
         <div class="time-summary-grid">
           <article class="time-summary-card is-featured">
-            <span>Break-even threshold</span>
-            <strong>{{ formatHours(timeTrackerSummary.thresholdHours) }}</strong>
+            <span>Monthly break-even threshold</span>
+            <strong>{{ formatHours(timeTrackerSummary.thresholdHours) }} per month</strong>
             <p>
               Based on {{ formatCurrency(timeTrackerSummary.monthlyPayment) }} per month at
               {{ formatCurrency(timeTrackerSummary.targetHourlyRate) }}/hr.
@@ -1453,6 +1512,16 @@ onUnmounted(() => {
             <strong>{{ peakTrackerMonth ? formatHours(peakTrackerMonth.hours) : '--' }}</strong>
             <p>{{ peakTrackerMonth?.label || 'No month logged yet' }}</p>
           </article>
+          <article class="time-summary-card">
+            <span>Average weekly hours</span>
+            <strong>{{ formatHours(averageWeeklyHours) }}</strong>
+            <p>Average across weeks with logged work.</p>
+          </article>
+          <article class="time-summary-card">
+            <span>Highest week</span>
+            <strong>{{ peakTrackerWeek ? formatHours(peakTrackerWeek.hours) : '--' }}</strong>
+            <p>{{ peakTrackerWeek?.label || 'No week logged yet' }}</p>
+          </article>
         </div>
 
         <section class="time-insight-band">
@@ -1467,6 +1536,34 @@ onUnmounted(() => {
             are over the target. The dashboard assigns work to the month of the editing start date,
             so cross-month projects count in the month they started.
           </p>
+        </section>
+
+        <section class="time-chart-card" aria-label="Weekly hours chart">
+          <div class="time-table-heading">
+            <div>
+              <p class="eyebrow">Weekly view</p>
+              <h2>Hours by week</h2>
+            </div>
+            <p>
+              Weekly totals are grouped by the editing start date, using Monday through Sunday weeks.
+            </p>
+          </div>
+          <div v-if="weeklyTrackerHours.length" class="time-week-chart">
+            <article v-for="week in weeklyTrackerHours" :key="week.key" class="time-week-row">
+              <div class="time-week-label">
+                <strong>{{ week.label }}</strong>
+                <span>{{ week.projects }} project{{ week.projects === 1 ? '' : 's' }}</span>
+              </div>
+              <div class="time-week-bar-track">
+                <span
+                  class="time-week-bar"
+                  :style="{ width: `${maxWeeklyHours ? Math.max((week.hours / maxWeeklyHours) * 100, 4) : 0}%` }"
+                ></span>
+              </div>
+              <strong class="time-week-hours">{{ formatHours(week.hours) }}</strong>
+            </article>
+          </div>
+          <p v-else class="empty-chart-note">No weekly hours logged yet.</p>
         </section>
 
         <section class="time-months" aria-label="Monthly client hours">
