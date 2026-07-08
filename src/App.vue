@@ -1417,17 +1417,39 @@ onUnmounted(() => {
               <h2>{{ timeClientForm.id ? 'Edit client' : 'Add client' }}</h2>
               <p>{{ timeSaveStatus || 'Create recurring monthly clients or one-off project clients.' }}</p>
             </div>
-            <label>
-              Active client
-              <select
-                v-model="selectedTimeClientId"
-                @change="timeEntryForm.clientId = selectedTimeClientId"
-              >
-                <option v-for="client in timeTrackerClients" :key="client.id" :value="client.id">
-                  {{ client.name }}
-                </option>
-              </select>
-            </label>
+            <div class="time-active-client">
+              <label>
+                Active dashboard client
+                <select
+                  v-model="selectedTimeClientId"
+                  @change="timeEntryForm.clientId = selectedTimeClientId"
+                >
+                  <option v-for="client in timeTrackerClients" :key="client.id" :value="client.id">
+                    {{ client.name }}
+                  </option>
+                </select>
+              </label>
+              <div class="time-client-actions">
+                <button
+                  class="secondary-action compact"
+                  type="button"
+                  @click="editTimeClient(selectedTimeClient)"
+                >
+                  Edit active client
+                </button>
+                <button class="secondary-action compact" type="button" @click="resetTimeClientForm">
+                  New client
+                </button>
+                <button
+                  v-if="selectedTimeClient && timeTrackerClients.length > 1"
+                  class="secondary-action compact danger-action"
+                  type="button"
+                  @click="removeTimeClient(selectedTimeClient)"
+                >
+                  Delete active client
+                </button>
+              </div>
+            </div>
             <label>
               Client name
               <input v-model="timeClientForm.name" required />
@@ -1457,25 +1479,6 @@ onUnmounted(() => {
             <div class="hero-actions">
               <button class="primary-action" type="submit">Save client</button>
               <button class="secondary-action" type="button" @click="resetTimeClientForm">Clear</button>
-            </div>
-            <div class="time-client-actions">
-              <button
-                v-for="client in timeTrackerClients"
-                :key="client.id"
-                class="secondary-action compact"
-                type="button"
-                @click="editTimeClient(client)"
-              >
-                Edit {{ client.name }}
-              </button>
-              <button
-                v-if="selectedTimeClient && timeTrackerClients.length > 1"
-                class="secondary-action compact danger-action"
-                type="button"
-                @click="removeTimeClient(selectedTimeClient)"
-              >
-                Delete active client
-              </button>
             </div>
           </form>
 

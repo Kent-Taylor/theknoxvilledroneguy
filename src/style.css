@@ -324,6 +324,11 @@ h3 {
   padding: 0 16px;
 }
 
+.time-row-actions .secondary-action.compact {
+  width: 86px;
+  padding: 0 12px;
+}
+
 .hero-media {
   position: relative;
   min-height: 620px;
@@ -1306,6 +1311,14 @@ h3 {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.time-active-client {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid var(--line);
 }
 
 .time-row-actions {
