@@ -1,6 +1,19 @@
 <script setup>
 import { faFacebookF, faInstagram, faTiktok } from '@fortawesome/free-brands-svg-icons'
-import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import {
+  BarElement,
+  BarController,
+  CategoryScale,
+  Chart,
+  Filler,
+  Legend,
+  LinearScale,
+  LineController,
+  LineElement,
+  PointElement,
+  Tooltip,
+} from 'chart.js'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { buildSocialProfileUrl, formatApplicationSubmittedAt } from './application-utils.js'
 import toursImage from './assets/services/360-tours.jpg'
 import commercialImage from './assets/services/commercial.jpg'
@@ -11,6 +24,19 @@ import inspectionsImage from './assets/services/inspections.jpg'
 import realEstateImage from './assets/services/real-estate.jpg'
 import heroImage from './assets/knoxville-drone-hero.png'
 import logoImage from './assets/knoxville-drone-guy-logo.png'
+
+Chart.register(
+  BarController,
+  LineController,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Tooltip,
+  Legend,
+  Filler,
+)
 
 const services = [
   {
@@ -143,6 +169,7 @@ const timeTracker = ref(null)
 const timeTrackerStatus = ref('Loading time tracker...')
 const timeSaveStatus = ref('')
 const selectedTimeClientId = ref('')
+const activeTimeChartTab = ref('weekly-hours')
 const expandedJobIds = ref(new Set())
 const visibleGalleryCount = ref(20)
 const galleryStatus = ref('Loading gallery...')
@@ -178,6 +205,8 @@ const timeEntryForm = ref({
 })
 const jobEditor = ref(null)
 const selectedJob = ref(null)
+const timeChartCanvas = ref(null)
+let timeChartInstance = null
 const applicationForm = ref({
   name: '',
   age: '',
@@ -295,6 +324,113 @@ const averageWeeklyHours = computed(() => {
 const maxWeeklyHours = computed(() =>
   weeklyTrackerHours.value.reduce((max, week) => Math.max(max, week.hours), 0),
 )
+const timeChartTabs = computed(() => [
+  { id: 'weekly-hours', label: 'Weekly Hours' },
+  { id: 'monthly-hours', label: 'Monthly Hours' },
+  { id: 'revenue', label: isSelectedTimeClientRecurring.value ? 'Monthly Retainer' : 'Project Revenue' },
+  { id: 'hourly-rate', label: 'Effective Rate' },
+])
+const timeChartData = computed(() => {
+  const months = selectedTimeClient.value?.months || []
+
+  return {
+    'weekly-hours': {
+      title: 'Weekly hours trend',
+      helper: 'Line chart of total logged hours grouped Monday through Sunday.',
+      labels: weeklyTrackerHours.value.map((week) => week.label),
+      datasets: [
+        {
+          type: 'line',
+          label: 'Hours',
+          data: weeklyTrackerHours.value.map((week) => week.hours),
+          borderColor: '#d9a321',
+          backgroundColor: 'rgba(216, 163, 41, 0.16)',
+          fill: true,
+          tension: 0.34,
+        },
+      ],
+      unit: 'hrs',
+    },
+    'monthly-hours': {
+      title: isSelectedTimeClientRecurring.value ? 'Monthly hours vs target' : 'Monthly hours',
+      helper: isSelectedTimeClientRecurring.value
+        ? 'Bars show logged hours. The dark line shows expected monthly hours.'
+        : 'Bars show total logged hours per month for this project-based client.',
+      labels: months.map((month) => month.label),
+      datasets: [
+        {
+          type: 'bar',
+          label: 'Logged hours',
+          data: months.map((month) => month.hours),
+          backgroundColor: 'rgba(216, 163, 41, 0.76)',
+          borderColor: '#c58b1c',
+          borderWidth: 1,
+        },
+        ...(isSelectedTimeClientRecurring.value
+          ? [
+              {
+                type: 'line',
+                label: 'Expected hours',
+                data: months.map(() => timeTrackerSummary.value.thresholdHours || 0),
+                borderColor: '#24191a',
+                backgroundColor: '#24191a',
+                pointRadius: 3,
+                tension: 0,
+              },
+            ]
+          : []),
+      ],
+      unit: 'hrs',
+    },
+    revenue: {
+      title: isSelectedTimeClientRecurring.value ? 'Monthly retainer value' : 'Project revenue by month',
+      helper: isSelectedTimeClientRecurring.value
+        ? 'Shows the retainer value for each month that has logged work.'
+        : 'Shows flat project fees grouped by month.',
+      labels: months.map((month) => month.label),
+      datasets: [
+        {
+          type: 'bar',
+          label: 'Revenue',
+          data: months.map((month) => month.revenue),
+          backgroundColor: 'rgba(47, 66, 31, 0.78)',
+          borderColor: '#24351f',
+          borderWidth: 1,
+        },
+      ],
+      unit: '$',
+    },
+    'hourly-rate': {
+      title: 'Effective hourly rate',
+      helper: 'Line chart of pay divided by logged hours for each month.',
+      labels: months.map((month) => month.label),
+      datasets: [
+        {
+          type: 'line',
+          label: 'Effective rate',
+          data: months.map((month) => month.effectiveHourlyRate || 0),
+          borderColor: '#0f766e',
+          backgroundColor: 'rgba(15, 118, 110, 0.14)',
+          fill: true,
+          tension: 0.3,
+        },
+      ],
+      unit: '$/hr',
+    },
+  }
+})
+const activeTimeChart = computed(() => timeChartData.value[activeTimeChartTab.value])
+const activeTimeChartHasData = computed(() =>
+  Boolean(activeTimeChart.value?.datasets.some((dataset) => dataset.data.some((value) => Number(value) > 0))),
+)
+const timeChartSignature = computed(() =>
+  JSON.stringify({
+    tab: activeTimeChartTab.value,
+    page: page.value,
+    clientId: selectedTimeClient.value?.id || '',
+    chart: activeTimeChart.value,
+  }),
+)
 const loginError = computed(() => {
   if (page.value !== 'login') {
     return ''
@@ -397,6 +533,103 @@ function formatCurrency(value) {
     currency: 'USD',
     maximumFractionDigits: 2,
   }).format(value)
+}
+
+function formatChartTick(value, unit) {
+  if (unit === '$') {
+    return formatCurrency(value)
+  }
+
+  if (unit === '$/hr') {
+    return `${formatCurrency(value)}/hr`
+  }
+
+  return formatHours(value)
+}
+
+function destroyTimeChart() {
+  if (timeChartInstance) {
+    timeChartInstance.destroy()
+    timeChartInstance = null
+  }
+}
+
+async function renderTimeChart() {
+  await nextTick()
+
+  if (
+    page.value !== 'time-tracker' ||
+    !timeChartCanvas.value ||
+    !activeTimeChart.value ||
+    !activeTimeChartHasData.value
+  ) {
+    destroyTimeChart()
+    return
+  }
+
+  destroyTimeChart()
+
+  timeChartInstance = new Chart(timeChartCanvas.value, {
+    type: 'bar',
+    data: {
+      labels: activeTimeChart.value.labels,
+      datasets: activeTimeChart.value.datasets,
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {
+        intersect: false,
+        mode: 'index',
+      },
+      plugins: {
+        legend: {
+          display: true,
+          labels: {
+            boxWidth: 12,
+            color: '#24191a',
+            font: {
+              weight: 700,
+            },
+          },
+        },
+        tooltip: {
+          callbacks: {
+            label(context) {
+              return `${context.dataset.label}: ${formatChartTick(context.parsed.y, activeTimeChart.value.unit)}`
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          grid: {
+            display: false,
+          },
+          ticks: {
+            color: '#8b7d80',
+            maxRotation: 0,
+            autoSkip: true,
+            font: {
+              weight: 700,
+            },
+          },
+        },
+        y: {
+          beginAtZero: true,
+          grid: {
+            color: 'rgba(36, 25, 26, 0.08)',
+          },
+          ticks: {
+            color: '#8b7d80',
+            callback(value) {
+              return formatChartTick(value, activeTimeChart.value.unit)
+            },
+          },
+        },
+      },
+    },
+  })
 }
 
 async function fetchJson(url, options = {}) {
@@ -1014,7 +1247,10 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('popstate', handlePopState)
   window.removeEventListener('scroll', handleGalleryScroll)
+  destroyTimeChart()
 })
+
+watch(timeChartSignature, renderTimeChart)
 </script>
 
 <template>
@@ -1607,14 +1843,32 @@ onUnmounted(() => {
           </p>
         </section>
 
-        <section class="time-chart-card" aria-label="Weekly hours chart">
+        <section class="time-chart-card" aria-label="Time tracker charts">
           <div class="time-table-heading">
             <div>
-              <p class="eyebrow">Weekly view</p>
-              <h2>Hours by week</h2>
+              <p class="eyebrow">Charts</p>
+              <h2>{{ activeTimeChart.title }}</h2>
             </div>
-            <p>
-              Weekly totals are grouped by the editing start date, using Monday through Sunday weeks.
+            <p>{{ activeTimeChart.helper }}</p>
+          </div>
+          <div class="time-chart-tabs" role="tablist" aria-label="Time tracker chart tabs">
+            <button
+              v-for="tab in timeChartTabs"
+              :key="tab.id"
+              class="time-chart-tab"
+              :class="{ active: activeTimeChartTab === tab.id }"
+              type="button"
+              role="tab"
+              :aria-selected="activeTimeChartTab === tab.id"
+              @click="activeTimeChartTab = tab.id"
+            >
+              {{ tab.label }}
+            </button>
+          </div>
+          <div class="time-chart-canvas-wrap">
+            <canvas v-show="activeTimeChartHasData" ref="timeChartCanvas"></canvas>
+            <p v-if="!activeTimeChartHasData" class="empty-chart-note">
+              Add more project entries to see this chart.
             </p>
           </div>
           <div v-if="weeklyTrackerHours.length" class="time-week-chart">

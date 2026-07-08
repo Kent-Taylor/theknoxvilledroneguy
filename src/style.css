@@ -1488,6 +1488,45 @@ h3 {
   overflow: hidden;
 }
 
+.time-chart-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 18px 26px 0;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.time-chart-tab {
+  min-height: 42px;
+  padding: 0 16px;
+  color: var(--black);
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: var(--blush);
+  border: 1px solid var(--line);
+  border-radius: 0;
+  cursor: pointer;
+}
+
+.time-chart-tab.active {
+  color: white;
+  background: var(--black);
+  border-color: var(--black);
+  box-shadow: 0 10px 22px rgba(216, 163, 41, 0.18);
+}
+
+.time-chart-canvas-wrap {
+  height: clamp(280px, 34vw, 430px);
+  padding: 24px 26px 8px;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.time-chart-canvas-wrap canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
 .time-week-chart {
   display: grid;
   gap: 12px;
