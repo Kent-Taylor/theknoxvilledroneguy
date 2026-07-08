@@ -1308,9 +1308,21 @@ h3 {
   gap: 8px;
 }
 
+.time-row-actions {
+  justify-content: center;
+}
+
 .time-client-actions {
   padding-top: 8px;
   border-top: 1px solid rgba(3, 3, 3, 0.08);
+}
+
+.time-field-note {
+  padding: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid var(--line);
 }
 
 .danger-action {
@@ -1557,14 +1569,21 @@ h3 {
 .time-table th,
 .time-table td {
   padding: 14px 16px;
-  text-align: right;
+  text-align: center;
+  vertical-align: middle;
   border-bottom: 1px solid var(--line);
 }
 
 .time-table th:first-child,
 .time-table td:first-child {
-  width: 34%;
+  width: 28%;
   text-align: left;
+}
+
+.time-table th:last-child,
+.time-table td:last-child {
+  width: 130px;
+  text-align: center;
 }
 
 .time-table th {

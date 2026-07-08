@@ -42,27 +42,38 @@ function cleanNumber(value, fieldName) {
 
 function validateClientPayload(body) {
   const name = cleanText(body.name)
-  const monthlyPayment = cleanNumber(body.monthlyPayment, 'Monthly payment')
+  const billingType =
+    body.billingType === 'project_based' ? 'project_based' : 'recurring_monthly'
+  const isRecurring = billingType === 'recurring_monthly'
+  const monthlyPayment = isRecurring ? cleanNumber(body.monthlyPayment, 'Monthly payment') : 0
+  const monthlyExpectedHours = isRecurring
+    ? cleanNumber(body.monthlyExpectedHours, 'Expected monthly hours')
+    : 0
   const targetHourlyRate = cleanNumber(body.targetHourlyRate || 75, 'Target hourly rate')
 
   if (!name) {
     throw new Error('Client name is required')
   }
 
+  if (isRecurring && monthlyExpectedHours <= 0) {
+    throw new Error('Expected monthly hours must be greater than zero')
+  }
+
   if (targetHourlyRate <= 0) {
     throw new Error('Target hourly rate must be greater than zero')
   }
 
-  return { name, monthlyPayment, targetHourlyRate }
+  return { name, billingType, monthlyPayment, monthlyExpectedHours, targetHourlyRate }
 }
 
 function validateEntryPayload(body) {
   const clientId = Number.parseInt(body.clientId, 10)
+  const client = Number.isInteger(clientId) ? getTimeClient(clientId) : null
   const projectName = cleanText(body.projectName)
   const editingStartDate = cleanText(body.editingStartDate)
   const editingEndDate = cleanText(body.editingEndDate)
 
-  if (!Number.isInteger(clientId) || !getTimeClient(clientId)) {
+  if (!client) {
     throw new Error('Choose a valid client')
   }
 
@@ -82,6 +93,8 @@ function validateEntryPayload(body) {
     filmingHours: cleanNumber(body.filmingHours, 'Filming hours'),
     drivingHours: cleanNumber(body.drivingHours, 'Driving hours'),
     editingHours: cleanNumber(body.editingHours, 'Editing hours'),
+    projectFee:
+      client.billingType === 'project_based' ? cleanNumber(body.projectFee, 'Project fee') : 0,
     notes: cleanText(body.notes),
   }
 }

@@ -148,7 +148,9 @@ function getDb() {
       CREATE TABLE IF NOT EXISTS time_clients (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
+        billing_type TEXT NOT NULL DEFAULT 'recurring_monthly',
         monthly_payment REAL NOT NULL DEFAULT 0,
+        monthly_expected_hours REAL NOT NULL DEFAULT 0,
         target_hourly_rate REAL NOT NULL DEFAULT 75,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -163,6 +165,7 @@ function getDb() {
         filming_hours REAL NOT NULL DEFAULT 0,
         driving_hours REAL NOT NULL DEFAULT 0,
         editing_hours REAL NOT NULL DEFAULT 0,
+        project_fee REAL NOT NULL DEFAULT 0,
         notes TEXT,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -172,6 +175,7 @@ function getDb() {
 
     migrateGalleryItems()
     migrateJobApplications()
+    migrateTimeTracker()
     seedTimeTracker()
 
     const count = db.prepare('SELECT COUNT(*) AS count FROM gallery_items').get().count
@@ -234,6 +238,52 @@ function migrateGalleryItems() {
   }
 }
 
+function migrateTimeTracker() {
+  const database = getDb()
+  const clientColumns = database
+    .prepare('PRAGMA table_info(time_clients)')
+    .all()
+    .map((column) => column.name)
+  const entryColumns = database
+    .prepare('PRAGMA table_info(time_entries)')
+    .all()
+    .map((column) => column.name)
+
+  const clientMigrations = [
+    ['billing_type', "ALTER TABLE time_clients ADD COLUMN billing_type TEXT NOT NULL DEFAULT 'recurring_monthly'"],
+    ['monthly_expected_hours', 'ALTER TABLE time_clients ADD COLUMN monthly_expected_hours REAL NOT NULL DEFAULT 0'],
+  ]
+  const entryMigrations = [
+    ['project_fee', 'ALTER TABLE time_entries ADD COLUMN project_fee REAL NOT NULL DEFAULT 0'],
+  ]
+
+  for (const [columnName, statement] of clientMigrations) {
+    if (!clientColumns.includes(columnName)) {
+      database.exec(statement)
+    }
+  }
+
+  for (const [columnName, statement] of entryMigrations) {
+    if (!entryColumns.includes(columnName)) {
+      database.exec(statement)
+    }
+  }
+
+  database
+    .prepare(
+      `
+        UPDATE time_clients
+        SET monthly_expected_hours =
+          CASE
+            WHEN monthly_expected_hours > 0 THEN monthly_expected_hours
+            WHEN target_hourly_rate > 0 THEN monthly_payment / target_hourly_rate
+            ELSE 0
+          END
+      `,
+    )
+    .run()
+}
+
 const carlyTimeSeedEntries = [
   ['Tiny home tour compilation', '2026-05-11', '2026-05-19', 0, 0, 15, ''],
   ['Trees/ Site prep LF (Blue Bird)', '2026-05-19', '2026-05-22', 3, 2.5, 3.5, ''],
@@ -267,8 +317,14 @@ function seedTimeTracker() {
   }
 
   const clientResult = database
-    .prepare('INSERT INTO time_clients (name, monthly_payment, target_hourly_rate) VALUES (?, ?, ?)')
-    .run('Builds By Carly', 1600, 75)
+    .prepare(
+      `
+        INSERT INTO time_clients
+          (name, billing_type, monthly_payment, monthly_expected_hours, target_hourly_rate)
+        VALUES (?, ?, ?, ?, ?)
+      `,
+    )
+    .run('Builds By Carly', 'recurring_monthly', 1600, 1600 / 75, 75)
   const clientId = clientResult.lastInsertRowid
   const insertEntry = database.prepare(
     `
@@ -281,14 +337,15 @@ function seedTimeTracker() {
           filming_hours,
           driving_hours,
           editing_hours,
+          project_fee,
           notes
         )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
   )
 
   for (const entry of carlyTimeSeedEntries) {
-    insertEntry.run(clientId, ...entry)
+    insertEntry.run(clientId, ...entry.slice(0, 6), 0, entry[6])
   }
 }
 
@@ -729,7 +786,9 @@ function mapTimeClient(row) {
   return {
     id: row.id,
     name: row.name,
+    billingType: row.billing_type || 'recurring_monthly',
     monthlyPayment: Number(row.monthly_payment) || 0,
+    monthlyExpectedHours: Number(row.monthly_expected_hours) || 0,
     targetHourlyRate: Number(row.target_hourly_rate) || 0,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -740,6 +799,8 @@ function mapTimeEntry(row) {
   const filmingHours = Number(row.filming_hours) || 0
   const drivingHours = Number(row.driving_hours) || 0
   const editingHours = Number(row.editing_hours) || 0
+  const projectFee = Number(row.project_fee) || 0
+  const totalHours = filmingHours + drivingHours + editingHours
 
   return {
     id: row.id,
@@ -751,7 +812,9 @@ function mapTimeEntry(row) {
     filmingHours,
     drivingHours,
     editingHours,
-    totalHours: filmingHours + drivingHours + editingHours,
+    totalHours,
+    projectFee,
+    effectiveHourlyRate: projectFee && totalHours ? projectFee / totalHours : null,
     notes: row.notes || '',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -770,20 +833,21 @@ function getTimeClient(id) {
   return row ? mapTimeClient(row) : null
 }
 
-function createTimeClient({ name, monthlyPayment, targetHourlyRate }) {
+function createTimeClient({ name, billingType, monthlyPayment, monthlyExpectedHours, targetHourlyRate }) {
   const result = getDb()
     .prepare(
       `
-        INSERT INTO time_clients (name, monthly_payment, target_hourly_rate)
-        VALUES (?, ?, ?)
+        INSERT INTO time_clients
+          (name, billing_type, monthly_payment, monthly_expected_hours, target_hourly_rate)
+        VALUES (?, ?, ?, ?, ?)
       `,
     )
-    .run(name, monthlyPayment, targetHourlyRate)
+    .run(name, billingType, monthlyPayment, monthlyExpectedHours, targetHourlyRate)
 
   return getTimeClient(result.lastInsertRowid)
 }
 
-function updateTimeClient(id, { name, monthlyPayment, targetHourlyRate }) {
+function updateTimeClient(id, { name, billingType, monthlyPayment, monthlyExpectedHours, targetHourlyRate }) {
   const existing = getTimeClient(id)
 
   if (!existing) {
@@ -794,13 +858,21 @@ function updateTimeClient(id, { name, monthlyPayment, targetHourlyRate }) {
     .prepare(
       `
         UPDATE time_clients
-        SET name = ?, monthly_payment = ?, target_hourly_rate = ?, updated_at = CURRENT_TIMESTAMP
+        SET
+          name = ?,
+          billing_type = ?,
+          monthly_payment = ?,
+          monthly_expected_hours = ?,
+          target_hourly_rate = ?,
+          updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `,
     )
     .run(
       name ?? existing.name,
+      billingType ?? existing.billingType,
       monthlyPayment ?? existing.monthlyPayment,
+      monthlyExpectedHours ?? existing.monthlyExpectedHours,
       targetHourlyRate ?? existing.targetHourlyRate,
       id,
     )
@@ -868,9 +940,10 @@ function createTimeEntry(payload) {
             filming_hours,
             driving_hours,
             editing_hours,
+            project_fee,
             notes
           )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
     )
     .run(
@@ -881,6 +954,7 @@ function createTimeEntry(payload) {
       payload.filmingHours,
       payload.drivingHours,
       payload.editingHours,
+      payload.projectFee,
       payload.notes || '',
     )
 
@@ -906,6 +980,7 @@ function updateTimeEntry(id, payload) {
           filming_hours = ?,
           driving_hours = ?,
           editing_hours = ?,
+          project_fee = ?,
           notes = ?,
           updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
@@ -919,6 +994,7 @@ function updateTimeEntry(id, payload) {
       payload.filmingHours ?? existing.filmingHours,
       payload.drivingHours ?? existing.drivingHours,
       payload.editingHours ?? existing.editingHours,
+      payload.projectFee ?? existing.projectFee,
       payload.notes ?? existing.notes,
       id,
     )
@@ -932,8 +1008,8 @@ function deleteTimeEntry(id) {
 }
 
 function summarizeTimeClient(client, entries) {
-  const thresholdHours =
-    client.targetHourlyRate > 0 ? client.monthlyPayment / client.targetHourlyRate : 0
+  const isRecurring = client.billingType === 'recurring_monthly'
+  const thresholdHours = isRecurring ? client.monthlyExpectedHours : 0
   const monthMap = new Map()
 
   for (const entry of entries) {
@@ -943,31 +1019,43 @@ function summarizeTimeClient(client, entries) {
       label: getMonthLabel(monthKey),
       hours: 0,
       projects: 0,
+      revenue: 0,
     }
 
     month.hours += entry.totalHours
     month.projects += 1
+    month.revenue += isRecurring ? 0 : entry.projectFee
     monthMap.set(monthKey, month)
   }
 
   const months = [...monthMap.values()]
     .sort((a, b) => a.key.localeCompare(b.key))
-    .map((month) => ({
-      ...month,
-      effectiveHourlyRate: month.hours ? client.monthlyPayment / month.hours : null,
-      thresholdDelta: month.hours - thresholdHours,
-      overThreshold: thresholdHours > 0 ? month.hours > thresholdHours : false,
-    }))
+    .map((month) => {
+      const revenue = isRecurring ? client.monthlyPayment : month.revenue
+
+      return {
+        ...month,
+        revenue,
+        effectiveHourlyRate: month.hours ? revenue / month.hours : null,
+        thresholdDelta: month.hours - thresholdHours,
+        overThreshold: isRecurring && thresholdHours > 0 ? month.hours > thresholdHours : false,
+      }
+    })
 
   const totalHours = entries.reduce((sum, entry) => sum + entry.totalHours, 0)
+  const totalRevenue = isRecurring
+    ? months.reduce((sum, month) => sum + month.revenue, 0)
+    : entries.reduce((sum, entry) => sum + entry.projectFee, 0)
   const activeMonths = months.filter((month) => month.hours > 0).length
 
   return {
     ...client,
+    isRecurring,
     thresholdHours,
     totalHours,
+    totalRevenue,
     projectCount: entries.length,
-    averageEffectiveHourlyRate: activeMonths ? client.monthlyPayment / (totalHours / activeMonths) : null,
+    averageEffectiveHourlyRate: totalHours ? totalRevenue / totalHours : null,
     lastEntry: entries[0] || null,
     months,
     entries,

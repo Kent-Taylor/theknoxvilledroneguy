@@ -156,7 +156,14 @@ const careersStatus = ref('')
 const applicationStatus = ref({ type: '', message: '' })
 const applicationSubmitting = ref(false)
 const jobForm = ref({ id: null, title: '', description: '' })
-const timeClientForm = ref({ id: null, name: '', monthlyPayment: 0, targetHourlyRate: 75 })
+const timeClientForm = ref({
+  id: null,
+  name: '',
+  billingType: 'recurring_monthly',
+  monthlyPayment: 0,
+  monthlyExpectedHours: 0,
+  targetHourlyRate: 75,
+})
 const timeEntryForm = ref({
   id: null,
   clientId: '',
@@ -166,6 +173,7 @@ const timeEntryForm = ref({
   filmingHours: 0,
   drivingHours: 0,
   editingHours: 0,
+  projectFee: 0,
   notes: '',
 })
 const jobEditor = ref(null)
@@ -231,6 +239,20 @@ const selectedTimeClient = computed(
     null,
 )
 const timeTrackerSummary = computed(() => selectedTimeClient.value || {})
+const selectedTimeEntryClient = computed(
+  () =>
+    timeTrackerClients.value.find((client) => String(client.id) === String(timeEntryForm.value.clientId)) ||
+    selectedTimeClient.value,
+)
+const isTimeClientRecurring = computed(
+  () => timeClientForm.value.billingType !== 'project_based',
+)
+const isSelectedTimeClientRecurring = computed(
+  () => selectedTimeClient.value?.billingType !== 'project_based',
+)
+const isSelectedEntryClientProjectBased = computed(
+  () => selectedTimeEntryClient.value?.billingType === 'project_based',
+)
 const peakTrackerMonth = computed(() => {
   const months = selectedTimeClient.value?.months || []
   return months.reduce((peak, month) => (!peak || month.hours > peak.hours ? month : peak), null)
@@ -490,14 +512,23 @@ async function loadTimeTracker() {
 }
 
 function resetTimeClientForm() {
-  timeClientForm.value = { id: null, name: '', monthlyPayment: 0, targetHourlyRate: 75 }
+  timeClientForm.value = {
+    id: null,
+    name: '',
+    billingType: 'recurring_monthly',
+    monthlyPayment: 0,
+    monthlyExpectedHours: 0,
+    targetHourlyRate: 75,
+  }
 }
 
 function editTimeClient(client) {
   timeClientForm.value = {
     id: client.id,
     name: client.name,
+    billingType: client.billingType || 'recurring_monthly',
     monthlyPayment: client.monthlyPayment,
+    monthlyExpectedHours: client.monthlyExpectedHours,
     targetHourlyRate: client.targetHourlyRate,
   }
 }
@@ -554,6 +585,7 @@ function resetTimeEntryForm() {
     filmingHours: 0,
     drivingHours: 0,
     editingHours: 0,
+    projectFee: 0,
     notes: '',
   }
 }
@@ -569,6 +601,7 @@ function editTimeEntry(entry) {
     filmingHours: entry.filmingHours,
     drivingHours: entry.drivingHours,
     editingHours: entry.editingHours,
+    projectFee: entry.projectFee,
     notes: entry.notes,
   }
 }
@@ -1357,16 +1390,15 @@ onUnmounted(() => {
     <section v-if="page === 'time-tracker'" class="time-tracker-page">
       <section class="page-title">
         <p class="eyebrow">Private dashboard</p>
-        <h1>Carly Hours</h1>
+        <h1>Time Tracker</h1>
         <p>
-          Monthly video hours for Builds By Carly, including the pay threshold for when the work
-          drops below your target hourly rate.
+          Track client hours, project fees, recurring retainers, and weekly workload in one place.
         </p>
       </section>
 
       <section v-if="!authStatus.loggedIn" class="integration-note time-login-note">
         <h2>Admin login required</h2>
-        <p>Sign in to view the private time tracker and Carly pay math.</p>
+        <p>Sign in to view the private time tracker and client pay math.</p>
         <div class="hero-actions">
           <a class="primary-action" href="/api/google/auth/start">Sign in with Google</a>
         </div>
@@ -1383,7 +1415,7 @@ onUnmounted(() => {
             <div>
               <p class="eyebrow">Clients</p>
               <h2>{{ timeClientForm.id ? 'Edit client' : 'Add client' }}</h2>
-              <p>{{ timeSaveStatus || 'Create clients and set their monthly pay target.' }}</p>
+              <p>{{ timeSaveStatus || 'Create recurring monthly clients or one-off project clients.' }}</p>
             </div>
             <label>
               Active client
@@ -1400,16 +1432,28 @@ onUnmounted(() => {
               Client name
               <input v-model="timeClientForm.name" required />
             </label>
-            <div class="time-form-row">
+            <label class="toggle-row">
+              <input
+                v-model="timeClientForm.billingType"
+                type="checkbox"
+                true-value="recurring_monthly"
+                false-value="project_based"
+              />
+              Recurring monthly client?
+            </label>
+            <div v-if="isTimeClientRecurring" class="time-form-row">
               <label>
                 Monthly payment
                 <input v-model.number="timeClientForm.monthlyPayment" min="0" step="0.01" type="number" />
               </label>
               <label>
-                Target hourly rate
-                <input v-model.number="timeClientForm.targetHourlyRate" min="1" step="0.01" type="number" />
+                Expected monthly hours
+                <input v-model.number="timeClientForm.monthlyExpectedHours" min="0.25" step="0.25" type="number" />
               </label>
             </div>
+            <p v-else class="time-field-note">
+              Project-based clients use a flat project fee on each project entry.
+            </p>
             <div class="hero-actions">
               <button class="primary-action" type="submit">Save client</button>
               <button class="secondary-action" type="button" @click="resetTimeClientForm">Clear</button>
@@ -1439,7 +1483,7 @@ onUnmounted(() => {
             <div>
               <p class="eyebrow">Projects</p>
               <h2>{{ timeEntryForm.id ? 'Edit project hours' : 'Add project hours' }}</h2>
-              <p>Log filming, driving, editing, dates, and notes for any client.</p>
+              <p>Log pay, filming, driving, editing, dates, and notes for any client.</p>
             </div>
             <label>
               Client
@@ -1477,6 +1521,10 @@ onUnmounted(() => {
                 <input v-model.number="timeEntryForm.editingHours" min="0" step="0.25" type="number" />
               </label>
             </div>
+            <label v-if="isSelectedEntryClientProjectBased">
+              Project fee
+              <input v-model.number="timeEntryForm.projectFee" min="0" step="0.01" type="number" />
+            </label>
             <label>
               Notes
               <textarea v-model="timeEntryForm.notes" rows="3"></textarea>
@@ -1489,12 +1537,19 @@ onUnmounted(() => {
         </section>
 
         <div class="time-summary-grid">
-          <article class="time-summary-card is-featured">
-            <span>Monthly break-even threshold</span>
+          <article v-if="isSelectedTimeClientRecurring" class="time-summary-card is-featured">
+            <span>Expected monthly hours</span>
             <strong>{{ formatHours(timeTrackerSummary.thresholdHours) }} per month</strong>
             <p>
-              Based on {{ formatCurrency(timeTrackerSummary.monthlyPayment) }} per month at
-              {{ formatCurrency(timeTrackerSummary.targetHourlyRate) }}/hr.
+              Based on {{ formatCurrency(timeTrackerSummary.monthlyPayment) }} per month for
+              {{ timeTrackerSummary.name }}.
+            </p>
+          </article>
+          <article v-else class="time-summary-card is-featured">
+            <span>Total project revenue</span>
+            <strong>{{ formatCurrency(timeTrackerSummary.totalRevenue) }}</strong>
+            <p>
+              Flat project fees logged for {{ timeTrackerSummary.name }}.
             </p>
           </article>
           <article class="time-summary-card">
@@ -1505,7 +1560,9 @@ onUnmounted(() => {
           <article class="time-summary-card">
             <span>Average effective rate</span>
             <strong>{{ formatCurrency(timeTrackerSummary.averageEffectiveHourlyRate) }}/hr</strong>
-            <p>Across months with logged Carly work.</p>
+            <p>
+              {{ isSelectedTimeClientRecurring ? 'Across months with logged work.' : 'Across project fees and logged hours.' }}
+            </p>
           </article>
           <article class="time-summary-card">
             <span>Highest month</span>
@@ -1528,13 +1585,22 @@ onUnmounted(() => {
           <div>
             <p class="eyebrow">What this means</p>
             <h2>
-              The {{ formatHours(timeTrackerSummary.thresholdHours) }} threshold is per month.
+              <template v-if="isSelectedTimeClientRecurring">
+                The {{ formatHours(timeTrackerSummary.thresholdHours) }} target is per month.
+              </template>
+              <template v-else>
+                Project fees drive this client’s effective hourly rate.
+              </template>
             </h2>
           </div>
-          <p>
+          <p v-if="isSelectedTimeClientRecurring">
             {{ overThresholdMonths.length }} month{{ overThresholdMonths.length === 1 ? '' : 's' }}
             are over the target. The dashboard assigns work to the month of the editing start date,
             so cross-month projects count in the month they started.
+          </p>
+          <p v-else>
+            Each project uses its flat fee divided by logged filming, driving, and editing hours.
+            Weekly and monthly charts stay scoped to the active client.
           </p>
         </section>
 
@@ -1583,16 +1649,27 @@ onUnmounted(() => {
             <div class="time-bar-track" aria-hidden="true">
               <span
                 class="time-bar"
-                :style="{ width: `${Math.min((month.hours / timeTrackerSummary.thresholdHours) * 100, 100)}%` }"
+                :style="{
+                  width: `${
+                    isSelectedTimeClientRecurring && timeTrackerSummary.thresholdHours
+                      ? Math.min((month.hours / timeTrackerSummary.thresholdHours) * 100, 100)
+                      : peakTrackerMonth?.hours
+                        ? Math.max((month.hours / peakTrackerMonth.hours) * 100, 4)
+                        : 0
+                  }%`,
+                }"
               ></span>
             </div>
             <p>
               {{ formatHours(month.hours) }}
-              <span v-if="month.overThreshold">
+              <span v-if="isSelectedTimeClientRecurring && month.overThreshold">
                 , {{ formatHours(month.thresholdDelta) }} over target
               </span>
-              <span v-else>
+              <span v-else-if="isSelectedTimeClientRecurring">
                 , {{ formatHours(Math.abs(month.thresholdDelta)) }} under target
+              </span>
+              <span v-else>
+                , {{ formatCurrency(month.revenue) }} revenue
               </span>
             </p>
           </article>
@@ -1617,6 +1694,8 @@ onUnmounted(() => {
                   <th>Driving</th>
                   <th>Editing</th>
                   <th>Total</th>
+                  <th v-if="!isSelectedTimeClientRecurring">Fee</th>
+                  <th v-if="!isSelectedTimeClientRecurring">Rate</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -1632,6 +1711,10 @@ onUnmounted(() => {
                   <td>{{ formatHours(entry.drivingHours) }}</td>
                   <td>{{ formatHours(entry.editingHours) }}</td>
                   <td>{{ formatHours(entry.totalHours) }}</td>
+                  <td v-if="!isSelectedTimeClientRecurring">{{ formatCurrency(entry.projectFee) }}</td>
+                  <td v-if="!isSelectedTimeClientRecurring">
+                    {{ entry.effectiveHourlyRate ? `${formatCurrency(entry.effectiveHourlyRate)}/hr` : '--' }}
+                  </td>
                   <td>
                     <div class="time-row-actions">
                       <button class="secondary-action compact" type="button" @click="editTimeEntry(entry)">
@@ -1648,7 +1731,7 @@ onUnmounted(() => {
                   </td>
                 </tr>
                 <tr v-if="!timeTrackerSummary.entries?.length">
-                  <td colspan="8">No project entries for this client yet.</td>
+                  <td :colspan="isSelectedTimeClientRecurring ? 8 : 10">No project entries for this client yet.</td>
                 </tr>
               </tbody>
             </table>
