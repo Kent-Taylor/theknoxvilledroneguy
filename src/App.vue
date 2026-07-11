@@ -168,7 +168,9 @@ const jobApplications = ref([])
 const timeTracker = ref(null)
 const timeTrackerStatus = ref('Loading time tracker...')
 const timeSaveStatus = ref('')
-const selectedTimeClientId = ref('')
+const ALL_TIME_CLIENTS_ID = 'all'
+const selectedTimeClientId = ref(ALL_TIME_CLIENTS_ID)
+const selectedTimeMonth = ref('all')
 const activeTimeChartTab = ref('weekly-hours')
 const expandedJobIds = ref(new Set())
 const visibleGalleryCount = ref(20)
@@ -203,6 +205,19 @@ const timeEntryForm = ref({
   projectFee: 0,
   notes: '',
 })
+const timeEntryModalForm = ref({
+  id: null,
+  clientId: '',
+  projectName: '',
+  editingStartDate: '',
+  editingEndDate: '',
+  filmingHours: 0,
+  drivingHours: 0,
+  editingHours: 0,
+  projectFee: 0,
+  notes: '',
+})
+const editingTimeEntry = ref(null)
 const jobEditor = ref(null)
 const selectedJob = ref(null)
 const timeChartCanvas = ref(null)
@@ -261,38 +276,110 @@ const selectedAdminItem = computed(() =>
 const visibleGalleryItems = computed(() => galleryItems.value.slice(0, visibleGalleryCount.value))
 const hasMoreGalleryItems = computed(() => visibleGalleryCount.value < galleryItems.value.length)
 const timeTrackerClients = computed(() => timeTracker.value?.clients || [])
-const selectedTimeClient = computed(
-  () =>
-    timeTrackerClients.value.find((client) => String(client.id) === String(selectedTimeClientId.value)) ||
-    timeTrackerClients.value[0] ||
-    null,
+const isAllTimeClientsSelected = computed(
+  () => selectedTimeClientId.value === ALL_TIME_CLIENTS_ID || !selectedTimeClientId.value,
 )
-const timeTrackerSummary = computed(() => selectedTimeClient.value || {})
+const selectedTimeClient = computed(() =>
+  isAllTimeClientsSelected.value
+    ? null
+    : timeTrackerClients.value.find((client) => String(client.id) === String(selectedTimeClientId.value)) ||
+      null,
+)
+const scopedTimeClients = computed(() =>
+  isAllTimeClientsSelected.value ? timeTrackerClients.value : selectedTimeClient.value ? [selectedTimeClient.value] : [],
+)
+const allTimeEntries = computed(() =>
+  timeTrackerClients.value.flatMap((client) =>
+    (client.entries || []).map((entry) => ({
+      ...entry,
+      clientId: entry.clientId || client.id,
+      clientName: entry.clientName || client.name,
+      clientBillingType: client.billingType || 'recurring_monthly',
+      clientMonthlyPayment: Number(client.monthlyPayment) || 0,
+      clientMonthlyExpectedHours: Number(client.monthlyExpectedHours) || 0,
+    })),
+  ),
+)
+const scopedTimeEntries = computed(() => {
+  if (isAllTimeClientsSelected.value) {
+    return allTimeEntries.value
+  }
+
+  return allTimeEntries.value.filter(
+    (entry) => String(entry.clientId) === String(selectedTimeClient.value?.id),
+  )
+})
+const timeMonthOptions = computed(() => {
+  const monthMap = new Map()
+
+  for (const entry of allTimeEntries.value) {
+    const month = getMonthBucket(entry.editingStartDate)
+
+    if (month) {
+      monthMap.set(month.key, month)
+    }
+  }
+
+  return [...monthMap.values()].sort((a, b) => b.key.localeCompare(a.key))
+})
+const filteredTimeEntries = computed(() => {
+  if (selectedTimeMonth.value === 'all') {
+    return scopedTimeEntries.value
+  }
+
+  return scopedTimeEntries.value.filter(
+    (entry) => getMonthBucket(entry.editingStartDate)?.key === selectedTimeMonth.value,
+  )
+})
+const timeTrackerSummary = computed(() =>
+  buildTimeDashboardSummary({
+    clients: scopedTimeClients.value,
+    entries: filteredTimeEntries.value,
+    isAll: isAllTimeClientsSelected.value,
+    selectedClient: selectedTimeClient.value,
+  }),
+)
 const selectedTimeEntryClient = computed(
   () =>
     timeTrackerClients.value.find((client) => String(client.id) === String(timeEntryForm.value.clientId)) ||
-    selectedTimeClient.value,
+    selectedTimeClient.value ||
+    timeTrackerClients.value[0] ||
+    null,
+)
+const selectedModalEntryClient = computed(
+  () =>
+    timeTrackerClients.value.find((client) => String(client.id) === String(timeEntryModalForm.value.clientId)) ||
+    null,
 )
 const isTimeClientRecurring = computed(
   () => timeClientForm.value.billingType !== 'project_based',
 )
 const isSelectedTimeClientRecurring = computed(
-  () => selectedTimeClient.value?.billingType !== 'project_based',
+  () => !isAllTimeClientsSelected.value && selectedTimeClient.value?.billingType !== 'project_based',
 )
 const isSelectedEntryClientProjectBased = computed(
   () => selectedTimeEntryClient.value?.billingType === 'project_based',
 )
+const isModalEntryClientProjectBased = computed(
+  () => selectedModalEntryClient.value?.billingType === 'project_based',
+)
+const shouldShowTimeMoneyColumns = computed(
+  () =>
+    isAllTimeClientsSelected.value ||
+    selectedTimeClient.value?.billingType === 'project_based' ||
+    timeTrackerSummary.value.entries.some((entry) => Number(entry.projectFee) > 0),
+)
 const peakTrackerMonth = computed(() => {
-  const months = selectedTimeClient.value?.months || []
+  const months = timeTrackerSummary.value.months || []
   return months.reduce((peak, month) => (!peak || month.hours > peak.hours ? month : peak), null)
 })
 const overThresholdMonths = computed(() =>
-  (selectedTimeClient.value?.months || []).filter((month) => month.overThreshold),
+  (timeTrackerSummary.value.months || []).filter((month) => month.overThreshold),
 )
 const weeklyTrackerHours = computed(() => {
   const weekMap = new Map()
 
-  for (const entry of selectedTimeClient.value?.entries || []) {
+  for (const entry of timeTrackerSummary.value.entries || []) {
     const week = getWeekBucket(entry.editingStartDate)
 
     if (!week) {
@@ -327,11 +414,12 @@ const maxWeeklyHours = computed(() =>
 const timeChartTabs = computed(() => [
   { id: 'weekly-hours', label: 'Weekly Hours' },
   { id: 'monthly-hours', label: 'Monthly Hours' },
-  { id: 'revenue', label: isSelectedTimeClientRecurring.value ? 'Monthly Retainer' : 'Project Revenue' },
-  { id: 'hourly-rate', label: 'Effective Rate' },
+  { id: 'income', label: 'Income' },
+  { id: 'effective-rate', label: 'Effective Rate' },
+  { id: 'incomplete-work', label: 'Incomplete Work' },
 ])
 const timeChartData = computed(() => {
-  const months = selectedTimeClient.value?.months || []
+  const months = timeTrackerSummary.value.months || []
 
   return {
     'weekly-hours': {
@@ -355,7 +443,7 @@ const timeChartData = computed(() => {
       title: isSelectedTimeClientRecurring.value ? 'Monthly hours vs target' : 'Monthly hours',
       helper: isSelectedTimeClientRecurring.value
         ? 'Bars show logged hours. The dark line shows expected monthly hours.'
-        : 'Bars show total logged hours per month for this project-based client.',
+        : 'Bars show total logged hours grouped by month.',
       labels: months.map((month) => month.label),
       datasets: [
         {
@@ -382,11 +470,9 @@ const timeChartData = computed(() => {
       ],
       unit: 'hrs',
     },
-    revenue: {
-      title: isSelectedTimeClientRecurring.value ? 'Monthly retainer value' : 'Project revenue by month',
-      helper: isSelectedTimeClientRecurring.value
-        ? 'Shows the retainer value for each month that has logged work.'
-        : 'Shows flat project fees grouped by month.',
+    income: {
+      title: 'Income by month',
+      helper: 'Recurring retainers count once for months with logged work. Project fees count where entered.',
       labels: months.map((month) => month.label),
       datasets: [
         {
@@ -400,7 +486,7 @@ const timeChartData = computed(() => {
       ],
       unit: '$',
     },
-    'hourly-rate': {
+    'effective-rate': {
       title: 'Effective hourly rate',
       helper: 'Line chart of pay divided by logged hours for each month.',
       labels: months.map((month) => month.label),
@@ -417,6 +503,22 @@ const timeChartData = computed(() => {
       ],
       unit: '$/hr',
     },
+    'incomplete-work': {
+      title: 'Incomplete work',
+      helper: 'Draft rows missing dates or hours, grouped by month plus unscheduled work.',
+      labels: timeTrackerSummary.value.incompleteBuckets.map((bucket) => bucket.label),
+      datasets: [
+        {
+          type: 'bar',
+          label: 'Incomplete entries',
+          data: timeTrackerSummary.value.incompleteBuckets.map((bucket) => bucket.count),
+          backgroundColor: 'rgba(127, 29, 29, 0.72)',
+          borderColor: '#7f1d1d',
+          borderWidth: 1,
+        },
+      ],
+      unit: 'count',
+    },
   }
 })
 const activeTimeChart = computed(() => timeChartData.value[activeTimeChartTab.value])
@@ -427,7 +529,8 @@ const timeChartSignature = computed(() =>
   JSON.stringify({
     tab: activeTimeChartTab.value,
     page: page.value,
-    clientId: selectedTimeClient.value?.id || '',
+    clientId: selectedTimeClientId.value || '',
+    month: selectedTimeMonth.value,
     chart: activeTimeChart.value,
   }),
 )
@@ -519,6 +622,158 @@ function getWeekBucket(value) {
   }
 }
 
+function getMonthBucket(value) {
+  if (!value) {
+    return null
+  }
+
+  const date = new Date(`${value}T00:00:00Z`)
+
+  if (Number.isNaN(date.getTime())) {
+    return null
+  }
+
+  const key = value.slice(0, 7)
+
+  return {
+    key,
+    label: new Intl.DateTimeFormat('en', {
+      month: 'short',
+      year: 'numeric',
+      timeZone: 'UTC',
+    }).format(date),
+  }
+}
+
+function isTimeEntryIncomplete(entry) {
+  return !entry.editingStartDate || !entry.editingEndDate || Number(entry.totalHours || 0) <= 0
+}
+
+function buildTimeDashboardSummary({ clients, entries, isAll, selectedClient }) {
+  const scopedClients = clients || []
+  const scopedEntries = entries || []
+  const clientById = new Map(scopedClients.map((client) => [String(client.id), client]))
+  const monthMap = new Map()
+  const recurringRevenueKeys = new Set()
+  const incompleteBucketMap = new Map()
+  let totalHours = 0
+  let undatedProjectRevenue = 0
+  let incompleteCount = 0
+
+  for (const entry of scopedEntries) {
+    const hours = Number(entry.totalHours) || 0
+    const projectFee = Number(entry.projectFee) || 0
+    const client = clientById.get(String(entry.clientId)) || {
+      billingType: entry.clientBillingType,
+      monthlyPayment: entry.clientMonthlyPayment,
+      monthlyExpectedHours: entry.clientMonthlyExpectedHours,
+    }
+    const month = getMonthBucket(entry.editingStartDate)
+    totalHours += hours
+
+    if (isTimeEntryIncomplete(entry)) {
+      incompleteCount += 1
+      const bucketKey = month?.key || 'unscheduled'
+      const bucket = incompleteBucketMap.get(bucketKey) || {
+        key: bucketKey,
+        label: month?.label || 'Unscheduled',
+        count: 0,
+      }
+      bucket.count += 1
+      incompleteBucketMap.set(bucketKey, bucket)
+    }
+
+    if (!month) {
+      if (client.billingType === 'project_based') {
+        undatedProjectRevenue += projectFee
+      }
+      continue
+    }
+
+    const currentMonth = monthMap.get(month.key) || {
+      ...month,
+      hours: 0,
+      projects: 0,
+      revenue: 0,
+      incompleteCount: 0,
+      effectiveHourlyRate: null,
+      overThreshold: false,
+      thresholdDelta: 0,
+    }
+
+    currentMonth.hours += hours
+    currentMonth.projects += 1
+
+    if (isTimeEntryIncomplete(entry)) {
+      currentMonth.incompleteCount += 1
+    }
+
+    if (client.billingType === 'project_based') {
+      currentMonth.revenue += projectFee
+    } else {
+      const revenueKey = `${client.id || entry.clientId}:${month.key}`
+
+      if (!recurringRevenueKeys.has(revenueKey)) {
+        currentMonth.revenue += Number(client.monthlyPayment) || 0
+        recurringRevenueKeys.add(revenueKey)
+      }
+    }
+
+    monthMap.set(month.key, currentMonth)
+  }
+
+  const months = [...monthMap.values()]
+    .sort((a, b) => a.key.localeCompare(b.key))
+    .map((month) => {
+      const thresholdHours =
+        !isAll && selectedClient?.billingType !== 'project_based'
+          ? Number(selectedClient?.monthlyExpectedHours) || 0
+          : 0
+      const thresholdDelta = thresholdHours ? month.hours - thresholdHours : 0
+
+      return {
+        ...month,
+        effectiveHourlyRate: month.hours > 0 && month.revenue > 0 ? month.revenue / month.hours : null,
+        overThreshold: thresholdHours ? thresholdDelta > 0 : false,
+        thresholdDelta,
+      }
+    })
+
+  const datedRevenue = months.reduce((sum, month) => sum + (Number(month.revenue) || 0), 0)
+  const totalRevenue = datedRevenue + undatedProjectRevenue
+  const allClientExpectedHours = scopedClients.reduce(
+    (sum, client) =>
+      sum + (client.billingType === 'project_based' ? 0 : Number(client.monthlyExpectedHours) || 0),
+    0,
+  )
+  const selectedThresholdHours =
+    !isAll && selectedClient?.billingType !== 'project_based'
+      ? Number(selectedClient.monthlyExpectedHours) || 0
+      : allClientExpectedHours
+
+  return {
+    id: isAll ? ALL_TIME_CLIENTS_ID : selectedClient?.id,
+    name: isAll ? 'All clients' : selectedClient?.name || 'Client',
+    billingType: isAll ? 'mixed' : selectedClient?.billingType || 'recurring_monthly',
+    monthlyPayment: isAll
+      ? scopedClients.reduce((sum, client) => sum + (Number(client.monthlyPayment) || 0), 0)
+      : Number(selectedClient?.monthlyPayment) || 0,
+    thresholdHours: selectedThresholdHours,
+    totalHours,
+    totalRevenue,
+    projectCount: scopedEntries.length,
+    incompleteCount,
+    averageEffectiveHourlyRate: totalHours > 0 && totalRevenue > 0 ? totalRevenue / totalHours : null,
+    entries: scopedEntries,
+    months,
+    incompleteBuckets: [...incompleteBucketMap.values()].sort((a, b) => {
+      if (a.key === 'unscheduled') return 1
+      if (b.key === 'unscheduled') return -1
+      return a.key.localeCompare(b.key)
+    }),
+  }
+}
+
 function formatHours(value) {
   return `${Number(value || 0).toFixed(2)} hrs`
 }
@@ -542,6 +797,10 @@ function formatChartTick(value, unit) {
 
   if (unit === '$/hr') {
     return `${formatCurrency(value)}/hr`
+  }
+
+  if (unit === 'count') {
+    return `${Number(value || 0).toFixed(0)}`
   }
 
   return formatHours(value)
@@ -728,19 +987,42 @@ async function loadTimeTracker() {
 
   try {
     timeTracker.value = await fetchJson('/api/time-tracker')
+    const hasSelectedClient = timeTracker.value.clients.some(
+      (client) => String(client.id) === String(selectedTimeClientId.value),
+    )
+
     if (
       !selectedTimeClientId.value ||
-      !timeTracker.value.clients.some((client) => String(client.id) === String(selectedTimeClientId.value))
+      (selectedTimeClientId.value !== ALL_TIME_CLIENTS_ID && !hasSelectedClient)
     ) {
-      selectedTimeClientId.value = timeTracker.value.clients[0]?.id || ''
+      selectedTimeClientId.value = ALL_TIME_CLIENTS_ID
     }
-    if (!timeEntryForm.value.clientId) {
-      timeEntryForm.value.clientId = selectedTimeClientId.value || ''
+
+    if (
+      !timeEntryForm.value.clientId ||
+      !timeTracker.value.clients.some((client) => String(client.id) === String(timeEntryForm.value.clientId))
+    ) {
+      timeEntryForm.value.clientId = selectedTimeClient.value?.id || timeTracker.value.clients[0]?.id || ''
+    }
+
+    if (
+      selectedTimeMonth.value !== 'all' &&
+      !timeMonthOptions.value.some((month) => month.key === selectedTimeMonth.value)
+    ) {
+      selectedTimeMonth.value = 'all'
     }
     timeTrackerStatus.value = ''
   } catch (error) {
     timeTracker.value = null
     timeTrackerStatus.value = error.message
+  }
+}
+
+function handleTimeClientSelectionChange() {
+  if (selectedTimeClient.value) {
+    timeEntryForm.value.clientId = selectedTimeClient.value.id
+  } else if (!timeEntryForm.value.clientId) {
+    timeEntryForm.value.clientId = timeTrackerClients.value[0]?.id || ''
   }
 }
 
@@ -797,7 +1079,7 @@ async function removeTimeClient(client) {
   try {
     await fetchJson(`/api/time-tracker/clients/${client.id}`, { method: 'DELETE' })
     if (String(selectedTimeClientId.value) === String(client.id)) {
-      selectedTimeClientId.value = ''
+      selectedTimeClientId.value = ALL_TIME_CLIENTS_ID
     }
     resetTimeClientForm()
     resetTimeEntryForm()
@@ -811,7 +1093,7 @@ async function removeTimeClient(client) {
 function resetTimeEntryForm() {
   timeEntryForm.value = {
     id: null,
-    clientId: selectedTimeClientId.value || selectedTimeClient.value?.id || '',
+    clientId: selectedTimeClient.value?.id || timeTrackerClients.value[0]?.id || '',
     projectName: '',
     editingStartDate: '',
     editingEndDate: '',
@@ -824,8 +1106,8 @@ function resetTimeEntryForm() {
 }
 
 function editTimeEntry(entry) {
-  selectedTimeClientId.value = entry.clientId
-  timeEntryForm.value = {
+  editingTimeEntry.value = entry
+  timeEntryModalForm.value = {
     id: entry.id,
     clientId: entry.clientId,
     projectName: entry.projectName,
@@ -836,6 +1118,22 @@ function editTimeEntry(entry) {
     editingHours: entry.editingHours,
     projectFee: entry.projectFee,
     notes: entry.notes,
+  }
+}
+
+function closeTimeEntryModal() {
+  editingTimeEntry.value = null
+  timeEntryModalForm.value = {
+    id: null,
+    clientId: '',
+    projectName: '',
+    editingStartDate: '',
+    editingEndDate: '',
+    filmingHours: 0,
+    drivingHours: 0,
+    editingHours: 0,
+    projectFee: 0,
+    notes: '',
   }
 }
 
@@ -861,6 +1159,37 @@ async function saveTimeEntry() {
   } catch (error) {
     timeSaveStatus.value = error.message
   }
+}
+
+async function saveTimeEntryModal() {
+  if (!editingTimeEntry.value?.id) {
+    return
+  }
+
+  timeSaveStatus.value = 'Updating entry...'
+
+  try {
+    await fetchJson(`/api/time-tracker/entries/${editingTimeEntry.value.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(timeEntryModalForm.value),
+    })
+
+    await loadTimeTracker()
+    closeTimeEntryModal()
+    timeSaveStatus.value = 'Entry updated'
+  } catch (error) {
+    timeSaveStatus.value = error.message
+  }
+}
+
+async function removeTimeEntryFromModal() {
+  if (!editingTimeEntry.value) {
+    return
+  }
+
+  const entry = editingTimeEntry.value
+  closeTimeEntryModal()
+  await removeTimeEntry(entry)
 }
 
 async function removeTimeEntry(entry) {
@@ -1645,7 +1974,7 @@ watch(timeChartSignature, renderTimeChart)
         <p>{{ timeTrackerStatus }}</p>
       </section>
 
-      <section v-else-if="selectedTimeClient" class="time-dashboard">
+      <section v-else-if="timeTrackerClients.length" class="time-dashboard">
         <section class="time-admin-grid">
           <form class="time-admin-panel" @submit.prevent="saveTimeClient">
             <div>
@@ -1658,8 +1987,9 @@ watch(timeChartSignature, renderTimeChart)
                 Active dashboard client
                 <select
                   v-model="selectedTimeClientId"
-                  @change="timeEntryForm.clientId = selectedTimeClientId"
+                  @change="handleTimeClientSelectionChange"
                 >
+                  <option :value="ALL_TIME_CLIENTS_ID">All clients</option>
                   <option v-for="client in timeTrackerClients" :key="client.id" :value="client.id">
                     {{ client.name }}
                   </option>
@@ -1669,6 +1999,7 @@ watch(timeChartSignature, renderTimeChart)
                 <button
                   class="secondary-action compact"
                   type="button"
+                  :disabled="!selectedTimeClient"
                   @click="editTimeClient(selectedTimeClient)"
                 >
                   Edit active client
@@ -1722,7 +2053,7 @@ watch(timeChartSignature, renderTimeChart)
             <div>
               <p class="eyebrow">Projects</p>
               <h2>{{ timeEntryForm.id ? 'Edit project hours' : 'Add project hours' }}</h2>
-              <p>Log pay, filming, driving, editing, dates, and notes for any client.</p>
+              <p>Log pay, filming, driving, editing, dates, and notes for any client. Drafts can be saved without dates.</p>
             </div>
             <label>
               Client
@@ -1739,7 +2070,7 @@ watch(timeChartSignature, renderTimeChart)
             <div class="time-form-row">
               <label>
                 Start date
-                <input v-model="timeEntryForm.editingStartDate" required type="date" />
+                <input v-model="timeEntryForm.editingStartDate" type="date" />
               </label>
               <label>
                 End date
@@ -1775,8 +2106,34 @@ watch(timeChartSignature, renderTimeChart)
           </form>
         </section>
 
+        <section class="time-dashboard-controls" aria-label="Time tracker filters">
+          <label>
+            Dashboard
+            <select v-model="selectedTimeClientId" @change="handleTimeClientSelectionChange">
+              <option :value="ALL_TIME_CLIENTS_ID">All clients</option>
+              <option v-for="client in timeTrackerClients" :key="client.id" :value="client.id">
+                {{ client.name }}
+              </option>
+            </select>
+          </label>
+          <label>
+            Month
+            <select v-model="selectedTimeMonth">
+              <option value="all">All months</option>
+              <option v-for="month in timeMonthOptions" :key="month.key" :value="month.key">
+                {{ month.label }}
+              </option>
+            </select>
+          </label>
+        </section>
+
         <div class="time-summary-grid">
-          <article v-if="isSelectedTimeClientRecurring" class="time-summary-card is-featured">
+          <article v-if="isAllTimeClientsSelected" class="time-summary-card is-featured">
+            <span>All client income</span>
+            <strong>{{ formatCurrency(timeTrackerSummary.totalRevenue) }}</strong>
+            <p>Combined recurring retainers and project fees for the selected period.</p>
+          </article>
+          <article v-else-if="isSelectedTimeClientRecurring" class="time-summary-card is-featured">
             <span>Expected monthly hours</span>
             <strong>{{ formatHours(timeTrackerSummary.thresholdHours) }} per month</strong>
             <p>
@@ -1794,7 +2151,7 @@ watch(timeChartSignature, renderTimeChart)
           <article class="time-summary-card">
             <span>Total {{ timeTrackerSummary.name }} hours</span>
             <strong>{{ formatHours(timeTrackerSummary.totalHours) }}</strong>
-            <p>{{ timeTrackerSummary.entries?.length || 0 }} logged project entries.</p>
+            <p>{{ timeTrackerSummary.projectCount || 0 }} logged project entries.</p>
           </article>
           <article class="time-summary-card">
             <span>Average effective rate</span>
@@ -1818,6 +2175,11 @@ watch(timeChartSignature, renderTimeChart)
             <strong>{{ peakTrackerWeek ? formatHours(peakTrackerWeek.hours) : '--' }}</strong>
             <p>{{ peakTrackerWeek?.label || 'No week logged yet' }}</p>
           </article>
+          <article class="time-summary-card">
+            <span>Incomplete entries</span>
+            <strong>{{ timeTrackerSummary.incompleteCount || 0 }}</strong>
+            <p>Draft rows missing dates or logged hours.</p>
+          </article>
         </div>
 
         <section class="time-insight-band">
@@ -1826,6 +2188,9 @@ watch(timeChartSignature, renderTimeChart)
             <h2>
               <template v-if="isSelectedTimeClientRecurring">
                 The {{ formatHours(timeTrackerSummary.thresholdHours) }} target is per month.
+              </template>
+              <template v-else-if="isAllTimeClientsSelected">
+                This dashboard combines every client and highlights unfinished work.
               </template>
               <template v-else>
                 Project fees drive this client’s effective hourly rate.
@@ -1836,6 +2201,10 @@ watch(timeChartSignature, renderTimeChart)
             {{ overThresholdMonths.length }} month{{ overThresholdMonths.length === 1 ? '' : 's' }}
             are over the target. The dashboard assigns work to the month of the editing start date,
             so cross-month projects count in the month they started.
+          </p>
+          <p v-else-if="isAllTimeClientsSelected">
+            Use the client and month filters to drill into a specific account or period. Draft rows stay visible so
+            unfinished work does not quietly disappear from your totals.
           </p>
           <p v-else>
             Each project uses its flat fee divided by logged filming, driving, and editing hours.
@@ -1951,8 +2320,8 @@ watch(timeChartSignature, renderTimeChart)
                   <th>Driving</th>
                   <th>Editing</th>
                   <th>Total</th>
-                  <th v-if="!isSelectedTimeClientRecurring">Fee</th>
-                  <th v-if="!isSelectedTimeClientRecurring">Rate</th>
+                  <th v-if="shouldShowTimeMoneyColumns">Fee</th>
+                  <th v-if="shouldShowTimeMoneyColumns">Rate</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -1960,16 +2329,26 @@ watch(timeChartSignature, renderTimeChart)
                 <tr v-for="entry in timeTrackerSummary.entries" :key="entry.id">
                   <td>
                     <strong>{{ entry.projectName }}</strong>
+                    <span v-if="isAllTimeClientsSelected">{{ entry.clientName }}</span>
                     <span v-if="entry.notes">{{ entry.notes }}</span>
                   </td>
-                  <td>{{ formatShortDate(entry.editingStartDate) }}</td>
-                  <td>{{ formatShortDate(entry.editingEndDate) }}</td>
+                  <td :class="{ 'is-incomplete-cell': !entry.editingStartDate }">
+                    {{ formatShortDate(entry.editingStartDate) || 'Missing' }}
+                    <small v-if="!entry.editingStartDate">Needs date</small>
+                  </td>
+                  <td :class="{ 'is-incomplete-cell': !entry.editingEndDate }">
+                    {{ formatShortDate(entry.editingEndDate) || 'Missing' }}
+                    <small v-if="!entry.editingEndDate">Needs date</small>
+                  </td>
                   <td>{{ formatHours(entry.filmingHours) }}</td>
                   <td>{{ formatHours(entry.drivingHours) }}</td>
                   <td>{{ formatHours(entry.editingHours) }}</td>
-                  <td>{{ formatHours(entry.totalHours) }}</td>
-                  <td v-if="!isSelectedTimeClientRecurring">{{ formatCurrency(entry.projectFee) }}</td>
-                  <td v-if="!isSelectedTimeClientRecurring">
+                  <td :class="{ 'is-incomplete-cell': Number(entry.totalHours || 0) <= 0 }">
+                    {{ formatHours(entry.totalHours) }}
+                    <small v-if="Number(entry.totalHours || 0) <= 0">Needs hours</small>
+                  </td>
+                  <td v-if="shouldShowTimeMoneyColumns">{{ formatCurrency(entry.projectFee) }}</td>
+                  <td v-if="shouldShowTimeMoneyColumns">
                     {{ entry.effectiveHourlyRate ? `${formatCurrency(entry.effectiveHourlyRate)}/hr` : '--' }}
                   </td>
                   <td>
@@ -1988,11 +2367,82 @@ watch(timeChartSignature, renderTimeChart)
                   </td>
                 </tr>
                 <tr v-if="!timeTrackerSummary.entries?.length">
-                  <td :colspan="isSelectedTimeClientRecurring ? 8 : 10">No project entries for this client yet.</td>
+                  <td :colspan="shouldShowTimeMoneyColumns ? 10 : 8">No project entries for this view yet.</td>
                 </tr>
               </tbody>
             </table>
           </div>
+        </section>
+
+        <section
+          v-if="editingTimeEntry"
+          class="time-entry-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="time-entry-modal-title"
+          @click.self="closeTimeEntryModal"
+        >
+          <form class="time-entry-modal-panel" @submit.prevent="saveTimeEntryModal">
+            <div class="time-entry-modal-header">
+              <div>
+                <p class="eyebrow">Edit project</p>
+                <h2 id="time-entry-modal-title">Project hours</h2>
+              </div>
+              <button class="secondary-action compact" type="button" @click="closeTimeEntryModal">
+                Cancel
+              </button>
+            </div>
+            <label>
+              Client
+              <select v-model="timeEntryModalForm.clientId" required>
+                <option v-for="client in timeTrackerClients" :key="client.id" :value="client.id">
+                  {{ client.name }}
+                </option>
+              </select>
+            </label>
+            <label>
+              Project or video name
+              <input v-model="timeEntryModalForm.projectName" required />
+            </label>
+            <div class="time-form-row">
+              <label>
+                Start date
+                <input v-model="timeEntryModalForm.editingStartDate" type="date" />
+              </label>
+              <label>
+                End date
+                <input v-model="timeEntryModalForm.editingEndDate" type="date" />
+              </label>
+            </div>
+            <div class="time-form-row three">
+              <label>
+                Filming
+                <input v-model.number="timeEntryModalForm.filmingHours" min="0" step="0.25" type="number" />
+              </label>
+              <label>
+                Driving
+                <input v-model.number="timeEntryModalForm.drivingHours" min="0" step="0.25" type="number" />
+              </label>
+              <label>
+                Editing
+                <input v-model.number="timeEntryModalForm.editingHours" min="0" step="0.25" type="number" />
+              </label>
+            </div>
+            <label v-if="isModalEntryClientProjectBased">
+              Project fee
+              <input v-model.number="timeEntryModalForm.projectFee" min="0" step="0.01" type="number" />
+            </label>
+            <label>
+              Notes
+              <textarea v-model="timeEntryModalForm.notes" rows="3"></textarea>
+            </label>
+            <div class="hero-actions">
+              <button class="primary-action" type="submit">Save changes</button>
+              <button class="secondary-action danger-action" type="button" @click="removeTimeEntryFromModal">
+                Delete entry
+              </button>
+            </div>
+          </form>
         </section>
       </section>
 

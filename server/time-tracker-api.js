@@ -81,10 +81,6 @@ function validateEntryPayload(body) {
     throw new Error('Project name is required')
   }
 
-  if (!editingStartDate) {
-    throw new Error('Editing start date is required')
-  }
-
   return {
     clientId,
     projectName,
