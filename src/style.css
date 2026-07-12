@@ -1267,6 +1267,42 @@ h3 {
   box-shadow: 0 14px 36px rgba(83, 54, 62, 0.09);
 }
 
+.time-admin-panel.is-collapsed {
+  min-height: 0;
+}
+
+.time-panel-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: start;
+}
+
+.time-panel-body {
+  display: grid;
+  gap: 14px;
+}
+
+.time-panel-toggle {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  color: var(--black);
+  font-size: 1.35rem;
+  font-weight: 800;
+  line-height: 1;
+  background: white;
+  border: 1px solid var(--line);
+  box-shadow: 0 10px 24px rgba(83, 54, 62, 0.08);
+}
+
+.time-panel-toggle:hover {
+  color: white;
+  background: var(--gold);
+  border-color: var(--gold);
+}
+
 .time-admin-panel h2 {
   font-size: clamp(1.7rem, 2.8vw, 2.6rem);
 }
