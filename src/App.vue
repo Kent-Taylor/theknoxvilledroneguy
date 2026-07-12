@@ -171,8 +171,8 @@ const timeSaveStatus = ref('')
 const ALL_TIME_CLIENTS_ID = 'all'
 const selectedTimeClientId = ref(ALL_TIME_CLIENTS_ID)
 const selectedTimeMonth = ref('all')
-const isTimeClientPanelOpen = ref(false)
-const isTimeProjectPanelOpen = ref(false)
+const isTimeClientModalOpen = ref(false)
+const isTimeProjectModalOpen = ref(false)
 const activeTimeChartTab = ref('weekly-hours')
 const expandedJobIds = ref(new Set())
 const visibleGalleryCount = ref(20)
@@ -1069,6 +1069,7 @@ async function saveTimeClient() {
     timeEntryForm.value.clientId = saved.id
     resetTimeClientForm()
     await loadTimeTracker()
+    isTimeClientModalOpen.value = false
     timeSaveStatus.value = isEditing ? 'Client updated' : 'Client added'
   } catch (error) {
     timeSaveStatus.value = error.message
@@ -1157,6 +1158,7 @@ async function saveTimeEntry() {
     selectedTimeClientId.value = timeEntryForm.value.clientId
     resetTimeEntryForm()
     await loadTimeTracker()
+    isTimeProjectModalOpen.value = false
     timeSaveStatus.value = isEditing ? 'Entry updated' : 'Entry added'
   } catch (error) {
     timeSaveStatus.value = error.message
@@ -1978,11 +1980,7 @@ watch(timeChartSignature, renderTimeChart)
 
       <section v-else-if="timeTrackerClients.length" class="time-dashboard">
         <section class="time-admin-grid">
-          <form
-            class="time-admin-panel"
-            :class="{ 'is-collapsed': !isTimeClientPanelOpen }"
-            @submit.prevent="saveTimeClient"
-          >
+          <article class="time-admin-panel time-admin-launch-card">
             <div class="time-panel-header">
               <div>
                 <p class="eyebrow">Clients</p>
@@ -1992,87 +1990,15 @@ watch(timeChartSignature, renderTimeChart)
               <button
                 class="time-panel-toggle"
                 type="button"
-                :aria-expanded="isTimeClientPanelOpen"
-                :aria-label="isTimeClientPanelOpen ? 'Collapse client form' : 'Expand client form'"
-                @click="isTimeClientPanelOpen = !isTimeClientPanelOpen"
+                aria-label="Open client form"
+                @click="isTimeClientModalOpen = true"
               >
-                <span aria-hidden="true">{{ isTimeClientPanelOpen ? '⌄' : '+' }}</span>
+                <span aria-hidden="true">+</span>
               </button>
             </div>
-            <div v-show="isTimeClientPanelOpen" class="time-panel-body">
-              <div class="time-active-client">
-                <label>
-                  Active dashboard client
-                  <select
-                    v-model="selectedTimeClientId"
-                    @change="handleTimeClientSelectionChange"
-                  >
-                    <option :value="ALL_TIME_CLIENTS_ID">All clients</option>
-                    <option v-for="client in timeTrackerClients" :key="client.id" :value="client.id">
-                      {{ client.name }}
-                    </option>
-                  </select>
-                </label>
-                <div class="time-client-actions">
-                  <button
-                    class="secondary-action compact"
-                    type="button"
-                    :disabled="!selectedTimeClient"
-                    @click="editTimeClient(selectedTimeClient)"
-                  >
-                    Edit active client
-                  </button>
-                  <button class="secondary-action compact" type="button" @click="resetTimeClientForm">
-                    New client
-                  </button>
-                  <button
-                    v-if="selectedTimeClient && timeTrackerClients.length > 1"
-                    class="secondary-action compact danger-action"
-                    type="button"
-                    @click="removeTimeClient(selectedTimeClient)"
-                  >
-                    Delete active client
-                  </button>
-                </div>
-              </div>
-              <label>
-                Client name
-                <input v-model="timeClientForm.name" required />
-              </label>
-              <label class="toggle-row">
-                <input
-                  v-model="timeClientForm.billingType"
-                  type="checkbox"
-                  true-value="recurring_monthly"
-                  false-value="project_based"
-                />
-                Recurring monthly client?
-              </label>
-              <div v-if="isTimeClientRecurring" class="time-form-row">
-                <label>
-                  Monthly payment
-                  <input v-model.number="timeClientForm.monthlyPayment" min="0" step="0.01" type="number" />
-                </label>
-                <label>
-                  Expected monthly hours
-                  <input v-model.number="timeClientForm.monthlyExpectedHours" min="0.25" step="0.25" type="number" />
-                </label>
-              </div>
-              <p v-else class="time-field-note">
-                Project-based clients use a flat project fee on each project entry.
-              </p>
-              <div class="hero-actions">
-                <button class="primary-action" type="submit">Save client</button>
-                <button class="secondary-action" type="button" @click="resetTimeClientForm">Clear</button>
-              </div>
-            </div>
-          </form>
+          </article>
 
-          <form
-            class="time-admin-panel"
-            :class="{ 'is-collapsed': !isTimeProjectPanelOpen }"
-            @submit.prevent="saveTimeEntry"
-          >
+          <article class="time-admin-panel time-admin-launch-card">
             <div class="time-panel-header">
               <div>
                 <p class="eyebrow">Projects</p>
@@ -2082,62 +2008,165 @@ watch(timeChartSignature, renderTimeChart)
               <button
                 class="time-panel-toggle"
                 type="button"
-                :aria-expanded="isTimeProjectPanelOpen"
-                :aria-label="isTimeProjectPanelOpen ? 'Collapse project form' : 'Expand project form'"
-                @click="isTimeProjectPanelOpen = !isTimeProjectPanelOpen"
+                aria-label="Open project form"
+                @click="isTimeProjectModalOpen = true"
               >
-                <span aria-hidden="true">{{ isTimeProjectPanelOpen ? '⌄' : '+' }}</span>
+                <span aria-hidden="true">+</span>
               </button>
             </div>
-            <div v-show="isTimeProjectPanelOpen" class="time-panel-body">
+          </article>
+        </section>
+
+        <section
+          v-if="isTimeClientModalOpen"
+          class="time-entry-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="time-client-modal-title"
+          @click.self="isTimeClientModalOpen = false"
+        >
+          <form class="time-entry-modal-panel" @submit.prevent="saveTimeClient">
+            <div class="time-entry-modal-header">
+              <div>
+                <p class="eyebrow">Clients</p>
+                <h2 id="time-client-modal-title">{{ timeClientForm.id ? 'Edit client' : 'Add client' }}</h2>
+                <p>{{ timeSaveStatus || 'Create recurring monthly clients or one-off project clients.' }}</p>
+              </div>
+              <button class="secondary-action compact" type="button" @click="isTimeClientModalOpen = false">
+                Cancel
+              </button>
+            </div>
+            <div class="time-active-client">
               <label>
-                Client
-                <select v-model="timeEntryForm.clientId" required>
+                Active dashboard client
+                <select v-model="selectedTimeClientId" @change="handleTimeClientSelectionChange">
+                  <option :value="ALL_TIME_CLIENTS_ID">All clients</option>
                   <option v-for="client in timeTrackerClients" :key="client.id" :value="client.id">
                     {{ client.name }}
                   </option>
                 </select>
               </label>
+              <div class="time-client-actions">
+                <button
+                  class="secondary-action compact"
+                  type="button"
+                  :disabled="!selectedTimeClient"
+                  @click="editTimeClient(selectedTimeClient)"
+                >
+                  Edit active client
+                </button>
+                <button class="secondary-action compact" type="button" @click="resetTimeClientForm">
+                  New client
+                </button>
+                <button
+                  v-if="selectedTimeClient && timeTrackerClients.length > 1"
+                  class="secondary-action compact danger-action"
+                  type="button"
+                  @click="removeTimeClient(selectedTimeClient)"
+                >
+                  Delete active client
+                </button>
+              </div>
+            </div>
+            <label>
+              Client name
+              <input v-model="timeClientForm.name" required />
+            </label>
+            <label class="toggle-row">
+              <input
+                v-model="timeClientForm.billingType"
+                type="checkbox"
+                true-value="recurring_monthly"
+                false-value="project_based"
+              />
+              Recurring monthly client?
+            </label>
+            <div v-if="isTimeClientRecurring" class="time-form-row">
               <label>
-                Project or video name
-                <input v-model="timeEntryForm.projectName" required />
-              </label>
-              <div class="time-form-row">
-                <label>
-                  Start date
-                  <input v-model="timeEntryForm.editingStartDate" type="date" />
-                </label>
-                <label>
-                  End date
-                  <input v-model="timeEntryForm.editingEndDate" type="date" />
-                </label>
-              </div>
-              <div class="time-form-row three">
-                <label>
-                  Filming
-                  <input v-model.number="timeEntryForm.filmingHours" min="0" step="0.25" type="number" />
-                </label>
-                <label>
-                  Driving
-                  <input v-model.number="timeEntryForm.drivingHours" min="0" step="0.25" type="number" />
-                </label>
-                <label>
-                  Editing
-                  <input v-model.number="timeEntryForm.editingHours" min="0" step="0.25" type="number" />
-                </label>
-              </div>
-              <label v-if="isSelectedEntryClientProjectBased">
-                Project fee
-                <input v-model.number="timeEntryForm.projectFee" min="0" step="0.01" type="number" />
+                Monthly payment
+                <input v-model.number="timeClientForm.monthlyPayment" min="0" step="0.01" type="number" />
               </label>
               <label>
-                Notes
-                <textarea v-model="timeEntryForm.notes" rows="3"></textarea>
+                Expected monthly hours
+                <input v-model.number="timeClientForm.monthlyExpectedHours" min="0.25" step="0.25" type="number" />
               </label>
-              <div class="hero-actions">
-                <button class="primary-action" type="submit">Save project</button>
-                <button class="secondary-action" type="button" @click="resetTimeEntryForm">Clear</button>
+            </div>
+            <p v-else class="time-field-note">
+              Project-based clients use a flat project fee on each project entry.
+            </p>
+            <div class="hero-actions">
+              <button class="primary-action" type="submit">Save client</button>
+              <button class="secondary-action" type="button" @click="resetTimeClientForm">Clear</button>
+            </div>
+          </form>
+        </section>
+
+        <section
+          v-if="isTimeProjectModalOpen"
+          class="time-entry-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="time-project-modal-title"
+          @click.self="isTimeProjectModalOpen = false"
+        >
+          <form class="time-entry-modal-panel" @submit.prevent="saveTimeEntry">
+            <div class="time-entry-modal-header">
+              <div>
+                <p class="eyebrow">Projects</p>
+                <h2 id="time-project-modal-title">{{ timeEntryForm.id ? 'Edit project hours' : 'Add project hours' }}</h2>
+                <p>Log pay, filming, driving, editing, dates, and notes for any client. Drafts can be saved without dates.</p>
               </div>
+              <button class="secondary-action compact" type="button" @click="isTimeProjectModalOpen = false">
+                Cancel
+              </button>
+            </div>
+            <label>
+              Client
+              <select v-model="timeEntryForm.clientId" required>
+                <option v-for="client in timeTrackerClients" :key="client.id" :value="client.id">
+                  {{ client.name }}
+                </option>
+              </select>
+            </label>
+            <label>
+              Project or video name
+              <input v-model="timeEntryForm.projectName" required />
+            </label>
+            <div class="time-form-row">
+              <label>
+                Start date
+                <input v-model="timeEntryForm.editingStartDate" type="date" />
+              </label>
+              <label>
+                End date
+                <input v-model="timeEntryForm.editingEndDate" type="date" />
+              </label>
+            </div>
+            <div class="time-form-row three">
+              <label>
+                Filming
+                <input v-model.number="timeEntryForm.filmingHours" min="0" step="0.25" type="number" />
+              </label>
+              <label>
+                Driving
+                <input v-model.number="timeEntryForm.drivingHours" min="0" step="0.25" type="number" />
+              </label>
+              <label>
+                Editing
+                <input v-model.number="timeEntryForm.editingHours" min="0" step="0.25" type="number" />
+              </label>
+            </div>
+            <label v-if="isSelectedEntryClientProjectBased">
+              Project fee
+              <input v-model.number="timeEntryForm.projectFee" min="0" step="0.01" type="number" />
+            </label>
+            <label>
+              Notes
+              <textarea v-model="timeEntryForm.notes" rows="3"></textarea>
+            </label>
+            <div class="hero-actions">
+              <button class="primary-action" type="submit">Save project</button>
+              <button class="secondary-action" type="button" @click="resetTimeEntryForm">Clear</button>
             </div>
           </form>
         </section>
