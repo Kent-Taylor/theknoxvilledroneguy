@@ -330,7 +330,7 @@ h3 {
 }
 
 .time-row-actions .secondary-action.compact {
-  width: 86px;
+  width: 104px;
   padding: 0 12px;
 }
 
@@ -1756,6 +1756,7 @@ h3 {
   display: grid;
   gap: 14px;
   width: min(760px, 100%);
+  min-width: 0;
   max-height: calc(100svh - 48px);
   padding: 26px;
   overflow: auto;
@@ -1783,6 +1784,7 @@ h3 {
 .time-entry-modal-panel select,
 .time-entry-modal-panel textarea {
   width: 100%;
+  min-width: 0;
   min-height: 46px;
   padding: 10px 12px;
   color: var(--ink);
@@ -2640,6 +2642,39 @@ code {
     grid-template-columns: 1fr;
   }
 
+  .time-admin-panel,
+  .time-admin-launch-card,
+  .time-dashboard-controls,
+  .time-summary-grid,
+  .time-insight-band,
+  .time-chart-card,
+  .time-months,
+  .time-table-wrap {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .time-entry-modal {
+    align-items: start;
+    padding: 14px;
+    overflow-y: auto;
+  }
+
+  .time-entry-modal-panel {
+    width: 100%;
+    max-height: none;
+  }
+
+  .time-entry-modal-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .time-active-client,
+  .time-client-actions {
+    min-width: 0;
+  }
+
   .time-table-heading {
     align-items: flex-start;
     flex-direction: column;
@@ -2790,15 +2825,36 @@ code {
 
   .time-summary-card,
   .time-admin-panel,
+  .time-entry-modal-panel,
   .time-insight-band,
   .time-month-card,
   .time-table-heading {
     padding: 20px;
   }
 
+  .time-panel-header {
+    grid-template-columns: minmax(0, 1fr) 42px;
+  }
+
+  .time-panel-header h2,
+  .time-entry-modal-header h2 {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
   .time-form-row,
   .time-form-row.three {
     grid-template-columns: 1fr;
+  }
+
+  .time-client-actions {
+    flex-direction: column;
+  }
+
+  .time-client-actions .secondary-action,
+  .time-entry-modal-panel .hero-actions .primary-action,
+  .time-entry-modal-panel .hero-actions .secondary-action {
+    width: 100%;
   }
 
   .hero-actions,

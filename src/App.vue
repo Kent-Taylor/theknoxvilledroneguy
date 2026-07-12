@@ -1124,6 +1124,22 @@ function editTimeEntry(entry) {
   }
 }
 
+function duplicateTimeEntry(entry) {
+  timeEntryForm.value = {
+    id: null,
+    clientId: entry.clientId,
+    projectName: entry.projectName,
+    editingStartDate: '',
+    editingEndDate: '',
+    filmingHours: 0,
+    drivingHours: 0,
+    editingHours: 0,
+    projectFee: 0,
+    notes: entry.notes || '',
+  }
+  isTimeProjectModalOpen.value = true
+}
+
 function closeTimeEntryModal() {
   editingTimeEntry.value = null
   timeEntryModalForm.value = {
@@ -2420,6 +2436,9 @@ watch(timeChartSignature, renderTimeChart)
                     <div class="time-row-actions">
                       <button class="secondary-action compact" type="button" @click="editTimeEntry(entry)">
                         Edit
+                      </button>
+                      <button class="secondary-action compact" type="button" @click="duplicateTimeEntry(entry)">
+                        Duplicate
                       </button>
                       <button
                         class="secondary-action compact danger-action"
