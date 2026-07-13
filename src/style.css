@@ -1732,6 +1732,34 @@ h3 {
   display: block;
 }
 
+.time-table td .time-entry-note {
+  display: -webkit-box;
+  max-width: 250px;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.time-table td .time-entry-note.is-expanded {
+  display: block;
+  max-width: 320px;
+  overflow: visible;
+  -webkit-line-clamp: unset;
+}
+
+.time-note-toggle {
+  display: inline-flex;
+  margin-top: 6px;
+  padding: 0;
+  color: var(--rose);
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: transparent;
+  border: 0;
+}
+
 .time-table td.is-incomplete-cell {
   background: #fff1f1;
   color: #7f1d1d;

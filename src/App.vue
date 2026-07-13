@@ -175,6 +175,7 @@ const isTimeClientModalOpen = ref(false)
 const isTimeProjectModalOpen = ref(false)
 const activeTimeChartTab = ref('weekly-hours')
 const expandedJobIds = ref(new Set())
+const expandedTimeNoteIds = ref(new Set())
 const visibleGalleryCount = ref(20)
 const galleryStatus = ref('Loading gallery...')
 const galleryError = ref('')
@@ -1243,6 +1244,26 @@ function editJob(job) {
 
 function isJobExpanded(jobId) {
   return expandedJobIds.value.has(jobId)
+}
+
+function isTimeNoteExpanded(entryId) {
+  return expandedTimeNoteIds.value.has(entryId)
+}
+
+function shouldClampTimeNote(notes) {
+  return String(notes || '').length > 110
+}
+
+function toggleTimeNote(entryId) {
+  const nextExpandedNotes = new Set(expandedTimeNoteIds.value)
+
+  if (nextExpandedNotes.has(entryId)) {
+    nextExpandedNotes.delete(entryId)
+  } else {
+    nextExpandedNotes.add(entryId)
+  }
+
+  expandedTimeNoteIds.value = nextExpandedNotes
 }
 
 function toggleJob(jobId) {
@@ -2411,7 +2432,21 @@ watch(timeChartSignature, renderTimeChart)
                   <td>
                     <strong>{{ entry.projectName }}</strong>
                     <span v-if="isAllTimeClientsSelected">{{ entry.clientName }}</span>
-                    <span v-if="entry.notes">{{ entry.notes }}</span>
+                    <span
+                      v-if="entry.notes"
+                      class="time-entry-note"
+                      :class="{ 'is-expanded': isTimeNoteExpanded(entry.id) }"
+                    >
+                      {{ entry.notes }}
+                    </span>
+                    <button
+                      v-if="shouldClampTimeNote(entry.notes)"
+                      class="time-note-toggle"
+                      type="button"
+                      @click="toggleTimeNote(entry.id)"
+                    >
+                      {{ isTimeNoteExpanded(entry.id) ? 'Show less' : 'Read more' }}
+                    </button>
                   </td>
                   <td :class="{ 'is-incomplete-cell': !entry.editingStartDate }">
                     {{ formatShortDate(entry.editingStartDate) || 'Missing' }}
