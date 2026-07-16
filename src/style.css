@@ -1410,10 +1410,11 @@ h3 {
   top: calc(100% + 6px);
   right: 50%;
   z-index: 8;
-  display: flex;
-  gap: 6px;
-  padding: 8px;
-  background: var(--paper);
+  display: grid;
+  min-width: 150px;
+  padding: 6px;
+  text-align: left;
+  background: white;
   border: 1px solid var(--line);
   box-shadow: 0 16px 34px rgba(83, 54, 62, 0.18);
   transform: translateX(50%);
@@ -1422,23 +1423,34 @@ h3 {
 .time-actions-menu button,
 .icon-action {
   display: inline-grid;
-  width: 42px;
-  height: 42px;
-  place-items: center;
+  min-height: 42px;
+  align-items: center;
+  justify-content: start;
+  padding: 0 12px;
   color: white;
   font-size: 1rem;
   background: var(--black);
   border: 0;
 }
 
+.time-actions-menu button {
+  width: 100%;
+  color: var(--heading-color);
+  font-size: 0.86rem;
+  font-weight: 750;
+  letter-spacing: 0.02em;
+  background: white;
+}
+
 .time-actions-menu button:hover,
 .icon-action:hover {
   color: var(--black);
-  background: var(--gold);
+  background: var(--blush);
 }
 
 .time-actions-menu button:last-child {
-  background: #7f1d1d;
+  color: #7f1d1d;
+  background: white;
 }
 
 .time-timer-badge {

@@ -2842,19 +2842,19 @@ watch(timeChartSignature, renderTimeChart)
                       </button>
                       <div v-if="openTimeActionMenuId === entry.id" class="time-actions-menu">
                         <button type="button" aria-label="Open timer" title="Timer" @click="openTimeTimer(entry)">
-                          <span aria-hidden="true">⏱</span>
+                          Timer
                         </button>
                         <button type="button" aria-label="View history" title="History" @click="openTimeEntryHistory(entry)">
-                          <span aria-hidden="true">◷</span>
+                          History
                         </button>
                         <button type="button" aria-label="Edit project" title="Edit" @click="editTimeEntry(entry); closeTimeActions()">
-                          <span aria-hidden="true">✎</span>
+                          Edit
                         </button>
                         <button type="button" aria-label="Duplicate project" title="Duplicate" @click="duplicateTimeEntry(entry); closeTimeActions()">
-                          <span aria-hidden="true">⧉</span>
+                          Duplicate
                         </button>
                         <button type="button" aria-label="Delete project" title="Delete" @click="requestRemoveTimeEntry(entry); closeTimeActions()">
-                          <span aria-hidden="true">🗑</span>
+                          Delete
                         </button>
                       </div>
                     </div>
