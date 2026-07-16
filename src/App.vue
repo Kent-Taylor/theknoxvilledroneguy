@@ -177,11 +177,17 @@ const isTimeProjectModalOpen = ref(false)
 const activeTimeChartTab = ref('weekly-hours')
 const expandedJobIds = ref(new Set())
 const expandedTimeNoteIds = ref(new Set())
-const expandedTimeTimerIds = ref(new Set())
 const timeEntryTimers = ref({})
 const timeTimerTick = ref(Date.now())
+const selectedTimerEntryId = ref(null)
+const selectedHistoryEntry = ref(null)
+const selectedHistoryEvents = ref([])
+const historyStatus = ref('')
+const openTimeActionMenuId = ref(null)
 const pendingDeleteTimeEntry = ref(null)
 const pendingClearTimerEntry = ref(null)
+const timeSaveToast = ref('')
+const duplicateSourceEntryName = ref('')
 const visibleGalleryCount = ref(20)
 const galleryStatus = ref('Loading gallery...')
 const galleryError = ref('')
@@ -232,6 +238,7 @@ const selectedJob = ref(null)
 const timeChartCanvas = ref(null)
 let timeChartInstance = null
 let timeTimerInterval = null
+let timeSaveToastTimeout = null
 const applicationForm = ref({
   name: '',
   age: '',
@@ -309,6 +316,9 @@ const allTimeEntries = computed(() =>
       clientMonthlyExpectedHours: Number(client.monthlyExpectedHours) || 0,
     })),
   ),
+)
+const selectedTimerEntry = computed(() =>
+  allTimeEntries.value.find((entry) => String(entry.id) === String(selectedTimerEntryId.value)) || null,
 )
 const scopedTimeEntries = computed(() => {
   if (isAllTimeClientsSelected.value) {
@@ -784,12 +794,34 @@ function buildTimeDashboardSummary({ clients, entries, isAll, selectedClient }) 
   }
 }
 
-function formatHours(value) {
-  return `${Number(value || 0).toFixed(2)} hrs`
-}
-
 function millisecondsToHours(milliseconds) {
   return Number(milliseconds || 0) / 3600000
+}
+
+function formatSecondsAsDuration(totalSeconds, { zeroLabel = '0 sec' } = {}) {
+  const roundedSeconds = Math.max(0, Math.round(Number(totalSeconds) || 0))
+  const hours = Math.floor(roundedSeconds / 3600)
+  const minutes = Math.floor((roundedSeconds % 3600) / 60)
+  const seconds = roundedSeconds % 60
+  const parts = []
+
+  if (hours) {
+    parts.push(`${hours} hr${hours === 1 ? '' : 's'}`)
+  }
+
+  if (minutes) {
+    parts.push(`${minutes} min`)
+  }
+
+  if (seconds || !parts.length) {
+    parts.push(seconds ? `${seconds} sec` : zeroLabel)
+  }
+
+  return parts.filter(Boolean).join(' ')
+}
+
+function formatHours(value) {
+  return formatSecondsAsDuration((Number(value) || 0) * 3600)
 }
 
 function formatTimerDuration(milliseconds) {
@@ -1041,6 +1073,27 @@ async function loadTimeTracker() {
   }
 }
 
+async function reloadTimeTrackerWithoutJump() {
+  const scrollX = window.scrollX
+  const scrollY = window.scrollY
+
+  await loadTimeTracker()
+  await nextTick()
+  window.scrollTo(scrollX, scrollY)
+}
+
+function showTimeSaveToast(message = 'Changes saved') {
+  timeSaveToast.value = message
+
+  if (timeSaveToastTimeout) {
+    window.clearTimeout(timeSaveToastTimeout)
+  }
+
+  timeSaveToastTimeout = window.setTimeout(() => {
+    timeSaveToast.value = ''
+  }, 3000)
+}
+
 function handleTimeClientSelectionChange() {
   if (selectedTimeClient.value) {
     timeEntryForm.value.clientId = selectedTimeClient.value.id
@@ -1089,9 +1142,10 @@ async function saveTimeClient() {
     selectedTimeClientId.value = saved.id
     timeEntryForm.value.clientId = saved.id
     resetTimeClientForm()
-    await loadTimeTracker()
+    await reloadTimeTrackerWithoutJump()
     isTimeClientModalOpen.value = false
     timeSaveStatus.value = isEditing ? 'Client updated' : 'Client added'
+    showTimeSaveToast()
   } catch (error) {
     timeSaveStatus.value = error.message
   }
@@ -1107,8 +1161,9 @@ async function removeTimeClient(client) {
     }
     resetTimeClientForm()
     resetTimeEntryForm()
-    await loadTimeTracker()
+    await reloadTimeTrackerWithoutJump()
     timeSaveStatus.value = 'Client deleted'
+    showTimeSaveToast()
   } catch (error) {
     timeSaveStatus.value = error.message
   }
@@ -1146,6 +1201,7 @@ function editTimeEntry(entry) {
 }
 
 function duplicateTimeEntry(entry) {
+  duplicateSourceEntryName.value = entry.projectName
   timeEntryForm.value = {
     id: null,
     clientId: entry.clientId,
@@ -1203,20 +1259,31 @@ function getTimeEntryTimerStatus(entryId) {
   return getTimeEntryTimer(entryId).status || 'idle'
 }
 
-function isTimeTimerExpanded(entryId) {
-  return expandedTimeTimerIds.value.has(entryId)
-}
+function getTimeEntryTimerControlIcon(entryId) {
+  const status = getTimeEntryTimerStatus(entryId)
 
-function toggleTimeTimer(entryId) {
-  const nextExpandedTimers = new Set(expandedTimeTimerIds.value)
-
-  if (nextExpandedTimers.has(entryId)) {
-    nextExpandedTimers.delete(entryId)
-  } else {
-    nextExpandedTimers.add(entryId)
+  if (status === 'running') {
+    return '⏸'
   }
 
-  expandedTimeTimerIds.value = nextExpandedTimers
+  if (status === 'paused') {
+    return '↻'
+  }
+
+  return '▶'
+}
+
+function openTimeActions(entryId) {
+  openTimeActionMenuId.value = openTimeActionMenuId.value === entryId ? null : entryId
+}
+
+function closeTimeActions() {
+  openTimeActionMenuId.value = null
+}
+
+function openTimeTimer(entry) {
+  selectedTimerEntryId.value = entry.id
+  closeTimeActions()
 }
 
 function upsertTimeEntryTimer(entryId, timerPatch) {
@@ -1231,7 +1298,59 @@ function upsertTimeEntryTimer(entryId, timerPatch) {
   persistTimeEntryTimers()
 }
 
-function startTimeEntryTimer(entry) {
+async function logTimeEntryEvent(entry, eventType, summary, detail = '') {
+  if (!entry?.id) {
+    return
+  }
+
+  await fetchJson(`/api/time-tracker/entries/${entry.id}/events`, {
+    method: 'POST',
+    body: JSON.stringify({ eventType, summary, detail }),
+  }).catch((error) => {
+    timeSaveStatus.value = error.message
+  })
+}
+
+async function openTimeEntryHistory(entry) {
+  selectedHistoryEntry.value = entry
+  selectedHistoryEvents.value = []
+  historyStatus.value = 'Loading history...'
+  closeTimeActions()
+
+  try {
+    selectedHistoryEvents.value = await fetchJson(`/api/time-tracker/entries/${entry.id}/events`)
+    historyStatus.value = selectedHistoryEvents.value.length ? '' : 'No history yet.'
+  } catch (error) {
+    historyStatus.value = error.message
+  }
+}
+
+function closeTimeEntryHistory() {
+  selectedHistoryEntry.value = null
+  selectedHistoryEvents.value = []
+  historyStatus.value = ''
+}
+
+function formatEventTimestamp(timestamp) {
+  if (!timestamp) {
+    return ''
+  }
+
+  const normalizedTimestamp = String(timestamp).includes('T')
+    ? timestamp
+    : `${String(timestamp).replace(' ', 'T')}Z`
+
+  return new Intl.DateTimeFormat('en', {
+    month: '2-digit',
+    day: '2-digit',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  }).format(new Date(normalizedTimestamp))
+}
+
+async function startTimeEntryTimer(entry) {
   const timer = getTimeEntryTimer(entry.id)
 
   if (timer.status === 'running') {
@@ -1242,6 +1361,12 @@ function startTimeEntryTimer(entry) {
     status: 'running',
     startedAt: Date.now(),
   })
+  await logTimeEntryEvent(
+    entry,
+    timer.status === 'paused' ? 'timer_resumed' : 'timer_started',
+    timer.status === 'paused' ? 'Timer resumed' : 'Timer started',
+  )
+  showTimeSaveToast()
 }
 
 function getTimeEntryTimerUnsavedMs(entryId) {
@@ -1254,7 +1379,7 @@ function getTimeEntryTimerUnsavedMs(entryId) {
   return (Number(timer.unsavedMs) || 0) + runningMs
 }
 
-async function saveTimeEntryTimer(entry, nextStatus = getTimeEntryTimerStatus(entry.id)) {
+async function saveTimeEntryTimer(entry, nextStatus = getTimeEntryTimerStatus(entry.id), eventSummary = '') {
   const timer = getTimeEntryTimer(entry.id)
   const unsavedMs = getTimeEntryTimerUnsavedMs(entry.id)
   const keepsRunning = nextStatus === 'running'
@@ -1264,6 +1389,10 @@ async function saveTimeEntryTimer(entry, nextStatus = getTimeEntryTimerStatus(en
       status: nextStatus,
       startedAt: keepsRunning ? Date.now() : null,
     })
+    if (eventSummary) {
+      await logTimeEntryEvent(entry, nextStatus === 'paused' ? 'timer_paused' : 'timer_event', eventSummary)
+      showTimeSaveToast()
+    }
     return
   }
 
@@ -1277,6 +1406,8 @@ async function saveTimeEntryTimer(entry, nextStatus = getTimeEntryTimerStatus(en
       body: JSON.stringify({
         ...entry,
         editingHours: Number(nextEditingHours.toFixed(4)),
+        _eventType: 'timer_added',
+        _eventSummary: `+${formatSecondsAsDuration(unsavedMs / 1000)} added by timer`,
       }),
     })
 
@@ -1286,35 +1417,42 @@ async function saveTimeEntryTimer(entry, nextStatus = getTimeEntryTimerStatus(en
       savedMs: (Number(timer.savedMs) || 0) + unsavedMs,
       unsavedMs: 0,
     })
-    await loadTimeTracker()
+    if (eventSummary) {
+      await logTimeEntryEvent(entry, nextStatus === 'paused' ? 'timer_paused' : 'timer_stopped', eventSummary)
+    }
+    await reloadTimeTrackerWithoutJump()
     timeSaveStatus.value = nextStatus === 'stopped' ? 'Timer stopped and saved' : 'Timer saved'
+    showTimeSaveToast()
   } catch (error) {
     timeSaveStatus.value = error.message
   }
 }
 
 async function pauseTimeEntryTimer(entry) {
-  await saveTimeEntryTimer(entry, 'paused')
+  await saveTimeEntryTimer(entry, 'paused', 'Timer paused')
 }
 
 async function stopTimeEntryTimer(entry) {
-  await saveTimeEntryTimer(entry, 'stopped')
+  await saveTimeEntryTimer(entry, 'stopped', 'Timer stopped')
 }
 
 function requestClearTimeEntryTimer(entry) {
   pendingClearTimerEntry.value = entry
 }
 
-function clearTimeEntryTimer() {
+async function clearTimeEntryTimer() {
   if (!pendingClearTimerEntry.value) {
     return
   }
 
+  const entry = pendingClearTimerEntry.value
   const nextTimers = { ...timeEntryTimers.value }
-  delete nextTimers[pendingClearTimerEntry.value.id]
+  delete nextTimers[entry.id]
   timeEntryTimers.value = nextTimers
   persistTimeEntryTimers()
   pendingClearTimerEntry.value = null
+  await logTimeEntryEvent(entry, 'timer_cleared', 'Timer cleared')
+  showTimeSaveToast()
 }
 
 function closeTimeEntryModal() {
@@ -1344,15 +1482,25 @@ async function saveTimeEntry() {
         : '/api/time-tracker/entries',
       {
         method: isEditing ? 'PATCH' : 'POST',
-        body: JSON.stringify(timeEntryForm.value),
+        body: JSON.stringify({
+          ...timeEntryForm.value,
+          ...(duplicateSourceEntryName.value && !isEditing
+            ? {
+                _eventType: 'entry_duplicated',
+                _eventSummary: `Duplicated from ${duplicateSourceEntryName.value}`,
+              }
+            : {}),
+        }),
       },
     )
 
     selectedTimeClientId.value = timeEntryForm.value.clientId
     resetTimeEntryForm()
-    await loadTimeTracker()
+    duplicateSourceEntryName.value = ''
+    await reloadTimeTrackerWithoutJump()
     isTimeProjectModalOpen.value = false
     timeSaveStatus.value = isEditing ? 'Entry updated' : 'Entry added'
+    showTimeSaveToast()
   } catch (error) {
     timeSaveStatus.value = error.message
   }
@@ -1371,9 +1519,10 @@ async function saveTimeEntryModal() {
       body: JSON.stringify(timeEntryModalForm.value),
     })
 
-    await loadTimeTracker()
+    await reloadTimeTrackerWithoutJump()
     closeTimeEntryModal()
     timeSaveStatus.value = 'Entry updated'
+    showTimeSaveToast()
   } catch (error) {
     timeSaveStatus.value = error.message
   }
@@ -1412,8 +1561,9 @@ async function confirmRemoveTimeEntry() {
     timeEntryTimers.value = nextTimers
     persistTimeEntryTimers()
     pendingDeleteTimeEntry.value = null
-    await loadTimeTracker()
+    await reloadTimeTrackerWithoutJump()
     timeSaveStatus.value = 'Entry deleted'
+    showTimeSaveToast()
   } catch (error) {
     timeSaveStatus.value = error.message
   }
@@ -1815,6 +1965,9 @@ onUnmounted(() => {
   if (timeTimerInterval) {
     window.clearInterval(timeTimerInterval)
   }
+  if (timeSaveToastTimeout) {
+    window.clearTimeout(timeSaveToastTimeout)
+  }
   destroyTimeChart()
 })
 
@@ -2192,6 +2345,10 @@ watch(timeChartSignature, renderTimeChart)
     </section>
 
     <section v-if="page === 'time-tracker'" class="time-tracker-page">
+      <div v-if="timeSaveToast" class="time-save-toast" role="status" aria-live="polite">
+        {{ timeSaveToast }}
+      </div>
+
       <section class="page-title">
         <p class="eyebrow">Private dashboard</p>
         <h1>Time Tracker</h1>
@@ -2667,63 +2824,39 @@ watch(timeChartSignature, renderTimeChart)
                   </td>
                   <td>
                     <div class="time-row-actions">
-                      <button
-                        class="secondary-action compact timer-action"
-                        type="button"
-                        :aria-expanded="isTimeTimerExpanded(entry.id)"
-                        @click="toggleTimeTimer(entry.id)"
+                      <span
+                        v-if="getTimeEntryTimerStatus(entry.id) !== 'idle'"
+                        class="time-timer-badge"
+                        :class="getTimeEntryTimerStatus(entry.id)"
                       >
-                        <span aria-hidden="true">⏱</span>
-                        Timer
+                        {{ getTimeEntryTimerStatus(entry.id) }}
+                        {{ formatTimerDuration(getTimeEntryTimerElapsed(entry.id)) }}
+                      </span>
+                      <button
+                        class="secondary-action compact actions-trigger"
+                        type="button"
+                        :aria-expanded="openTimeActionMenuId === entry.id"
+                        @click="openTimeActions(entry.id)"
+                      >
+                        Actions
                       </button>
-                      <div v-if="isTimeTimerExpanded(entry.id)" class="time-timer-panel">
-                        <strong>{{ formatTimerDuration(getTimeEntryTimerElapsed(entry.id)) }}</strong>
-                        <span>{{ getTimeEntryTimerStatus(entry.id) }}</span>
-                        <div class="time-timer-controls">
-                          <button
-                            v-if="getTimeEntryTimerStatus(entry.id) === 'running'"
-                            class="secondary-action compact"
-                            type="button"
-                            @click="pauseTimeEntryTimer(entry)"
-                          >
-                            Pause
-                          </button>
-                          <button
-                            v-else
-                            class="secondary-action compact"
-                            type="button"
-                            @click="startTimeEntryTimer(entry)"
-                          >
-                            {{ getTimeEntryTimerStatus(entry.id) === 'idle' ? 'Start' : 'Resume' }}
-                          </button>
-                          <button class="secondary-action compact" type="button" @click="stopTimeEntryTimer(entry)">
-                            Stop
-                          </button>
-                          <button class="secondary-action compact" type="button" @click="saveTimeEntryTimer(entry)">
-                            Save
-                          </button>
-                          <button
-                            class="secondary-action compact danger-action"
-                            type="button"
-                            @click="requestClearTimeEntryTimer(entry)"
-                          >
-                            Clear
-                          </button>
-                        </div>
+                      <div v-if="openTimeActionMenuId === entry.id" class="time-actions-menu">
+                        <button type="button" aria-label="Open timer" title="Timer" @click="openTimeTimer(entry)">
+                          <span aria-hidden="true">⏱</span>
+                        </button>
+                        <button type="button" aria-label="View history" title="History" @click="openTimeEntryHistory(entry)">
+                          <span aria-hidden="true">◷</span>
+                        </button>
+                        <button type="button" aria-label="Edit project" title="Edit" @click="editTimeEntry(entry); closeTimeActions()">
+                          <span aria-hidden="true">✎</span>
+                        </button>
+                        <button type="button" aria-label="Duplicate project" title="Duplicate" @click="duplicateTimeEntry(entry); closeTimeActions()">
+                          <span aria-hidden="true">⧉</span>
+                        </button>
+                        <button type="button" aria-label="Delete project" title="Delete" @click="requestRemoveTimeEntry(entry); closeTimeActions()">
+                          <span aria-hidden="true">🗑</span>
+                        </button>
                       </div>
-                      <button class="secondary-action compact" type="button" @click="editTimeEntry(entry)">
-                        Edit
-                      </button>
-                      <button class="secondary-action compact" type="button" @click="duplicateTimeEntry(entry)">
-                        Duplicate
-                      </button>
-                      <button
-                        class="secondary-action compact danger-action"
-                        type="button"
-                        @click="requestRemoveTimeEntry(entry)"
-                      >
-                        Delete
-                      </button>
                     </div>
                   </td>
                 </tr>
@@ -2804,6 +2937,88 @@ watch(timeChartSignature, renderTimeChart)
               </button>
             </div>
           </form>
+        </section>
+
+        <section
+          v-if="selectedTimerEntry"
+          class="time-entry-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="time-timer-modal-title"
+          @click.self="selectedTimerEntryId = null"
+        >
+          <div class="time-entry-modal-panel time-timer-modal-panel">
+            <div class="time-entry-modal-header">
+              <div>
+                <p class="eyebrow">Project timer</p>
+                <h2 id="time-timer-modal-title">{{ selectedTimerEntry.projectName }}</h2>
+                <p>{{ getTimeEntryTimerStatus(selectedTimerEntry.id) }}</p>
+              </div>
+              <button class="secondary-action compact" type="button" @click="selectedTimerEntryId = null">
+                Close
+              </button>
+            </div>
+            <strong class="time-timer-readout">
+              {{ formatTimerDuration(getTimeEntryTimerElapsed(selectedTimerEntry.id)) }}
+            </strong>
+            <p class="time-timer-helper">
+              Saved editing time: {{ formatHours(selectedTimerEntry.editingHours) }}.
+              Timer saves add to this total.
+            </p>
+            <div class="time-timer-icon-controls" aria-label="Timer controls">
+              <button
+                class="secondary-action icon-action"
+                type="button"
+                :aria-label="getTimeEntryTimerStatus(selectedTimerEntry.id) === 'running' ? 'Pause timer' : 'Start or resume timer'"
+                :title="getTimeEntryTimerStatus(selectedTimerEntry.id) === 'running' ? 'Pause' : 'Start or resume'"
+                @click="
+                  getTimeEntryTimerStatus(selectedTimerEntry.id) === 'running'
+                    ? pauseTimeEntryTimer(selectedTimerEntry)
+                    : startTimeEntryTimer(selectedTimerEntry)
+                "
+              >
+                <span aria-hidden="true">{{ getTimeEntryTimerControlIcon(selectedTimerEntry.id) }}</span>
+              </button>
+              <button class="secondary-action icon-action" type="button" aria-label="Stop timer" title="Stop" @click="stopTimeEntryTimer(selectedTimerEntry)">
+                <span aria-hidden="true">■</span>
+              </button>
+              <button class="secondary-action icon-action" type="button" aria-label="Save timer" title="Save" @click="saveTimeEntryTimer(selectedTimerEntry, getTimeEntryTimerStatus(selectedTimerEntry.id), 'Timer saved')">
+                <span aria-hidden="true">💾</span>
+              </button>
+              <button class="secondary-action icon-action danger-action" type="button" aria-label="Clear timer" title="Clear" @click="requestClearTimeEntryTimer(selectedTimerEntry)">
+                <span aria-hidden="true">⌫</span>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section
+          v-if="selectedHistoryEntry"
+          class="time-entry-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="time-history-modal-title"
+          @click.self="closeTimeEntryHistory"
+        >
+          <div class="time-entry-modal-panel">
+            <div class="time-entry-modal-header">
+              <div>
+                <p class="eyebrow">Log history</p>
+                <h2 id="time-history-modal-title">{{ selectedHistoryEntry.projectName }}</h2>
+              </div>
+              <button class="secondary-action compact" type="button" @click="closeTimeEntryHistory">
+                Close
+              </button>
+            </div>
+            <p v-if="historyStatus" class="time-history-status">{{ historyStatus }}</p>
+            <ul v-else class="time-history-list">
+              <li v-for="event in selectedHistoryEvents" :key="event.id">
+                <strong>{{ event.summary }}</strong>
+                <span>{{ formatEventTimestamp(event.createdAt) }}</span>
+                <small v-if="event.detail">{{ event.detail }}</small>
+              </li>
+            </ul>
+          </div>
         </section>
 
         <section

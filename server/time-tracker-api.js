@@ -1,10 +1,12 @@
 import {
   createTimeClient,
   createTimeEntry,
+  createTimeEntryEvent,
   deleteTimeClient,
   deleteTimeEntry,
   getTimeClient,
   getTimeEntry,
+  getTimeEntryEvents,
   getTimeTrackerDashboard,
   updateTimeClient,
   updateTimeEntry,
@@ -95,6 +97,30 @@ function validateEntryPayload(body) {
   }
 }
 
+function getEntryEventOptions(body) {
+  const eventType = cleanText(body._eventType)
+  const eventSummary = cleanText(body._eventSummary)
+  const eventDetail = cleanText(body._eventDetail)
+
+  if (!eventType || !eventSummary) {
+    return {}
+  }
+
+  return { eventType, eventSummary, eventDetail }
+}
+
+function validateEventPayload(body) {
+  const eventType = cleanText(body.eventType)
+  const summary = cleanText(body.summary)
+  const detail = cleanText(body.detail)
+
+  if (!eventType || !summary) {
+    throw new Error('Event type and summary are required')
+  }
+
+  return { eventType, summary, detail }
+}
+
 async function handleTimeTrackerApi(req, res) {
   const url = new URL(req.url, 'http://localhost')
   const path = url.pathname
@@ -156,9 +182,37 @@ async function handleTimeTrackerApi(req, res) {
 
   if (req.method === 'POST' && path === '/api/time-tracker/entries') {
     try {
-      jsonResponse(res, 201, createTimeEntry(validateEntryPayload(await readJsonBody(req))))
+      const body = await readJsonBody(req)
+      jsonResponse(res, 201, createTimeEntry(validateEntryPayload(body), getEntryEventOptions(body)))
     } catch (error) {
       jsonResponse(res, 400, { error: 'Unable to create entry', message: error.message })
+    }
+
+    return true
+  }
+
+  const entryEventsMatch = path.match(/^\/api\/time-tracker\/entries\/(\d+)\/events$/)
+
+  if (entryEventsMatch && req.method === 'GET') {
+    jsonResponse(res, 200, getTimeEntryEvents(Number(entryEventsMatch[1])))
+    return true
+  }
+
+  if (entryEventsMatch && req.method === 'POST') {
+    try {
+      const entryId = Number(entryEventsMatch[1])
+      if (!getTimeEntry(entryId)) {
+        jsonResponse(res, 404, { error: 'Entry not found' })
+        return true
+      }
+      const event = validateEventPayload(await readJsonBody(req))
+      jsonResponse(
+        res,
+        201,
+        createTimeEntryEvent(entryId, event.eventType, event.summary, event.detail),
+      )
+    } catch (error) {
+      jsonResponse(res, 400, { error: 'Unable to create event', message: error.message })
     }
 
     return true
@@ -168,10 +222,8 @@ async function handleTimeTrackerApi(req, res) {
 
   if (entryMatch && req.method === 'PATCH') {
     try {
-      const updated = updateTimeEntry(
-        Number(entryMatch[1]),
-        validateEntryPayload(await readJsonBody(req)),
-      )
+      const body = await readJsonBody(req)
+      const updated = updateTimeEntry(Number(entryMatch[1]), validateEntryPayload(body), getEntryEventOptions(body))
 
       if (!updated) {
         jsonResponse(res, 404, { error: 'Entry not found' })

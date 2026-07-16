@@ -1397,7 +1397,75 @@ h3 {
 }
 
 .time-row-actions {
+  position: relative;
   justify-content: center;
+}
+
+.actions-trigger {
+  width: 104px;
+}
+
+.time-actions-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 50%;
+  z-index: 8;
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  box-shadow: 0 16px 34px rgba(83, 54, 62, 0.18);
+  transform: translateX(50%);
+}
+
+.time-actions-menu button,
+.icon-action {
+  display: inline-grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  color: white;
+  font-size: 1rem;
+  background: var(--black);
+  border: 0;
+}
+
+.time-actions-menu button:hover,
+.icon-action:hover {
+  color: var(--black);
+  background: var(--gold);
+}
+
+.time-actions-menu button:last-child {
+  background: #7f1d1d;
+}
+
+.time-timer-badge {
+  display: inline-flex;
+  width: 104px;
+  justify-content: center;
+  padding: 7px 8px;
+  color: var(--black);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  line-height: 1.25;
+  text-transform: uppercase;
+  background: var(--blush);
+  border: 1px solid var(--line);
+}
+
+.time-timer-badge.running {
+  color: #14532d;
+  background: #ecfdf3;
+  border-color: #bbf7d0;
+}
+
+.time-timer-badge.paused {
+  color: #854d0e;
+  background: #fef9c3;
+  border-color: #fde68a;
 }
 
 .time-timer-panel {
@@ -1875,6 +1943,99 @@ h3 {
 
 .confirm-panel p strong {
   color: var(--ink);
+}
+
+.time-timer-modal-panel {
+  width: min(620px, 100%);
+  text-align: center;
+}
+
+.time-timer-readout {
+  display: block;
+  color: var(--heading-color);
+  font-size: clamp(3rem, 10vw, 5.5rem);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.time-timer-helper,
+.time-history-status {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.time-timer-icon-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+}
+
+.time-timer-icon-controls .icon-action {
+  width: 54px;
+  height: 54px;
+  font-size: 1.35rem;
+}
+
+.time-history-list {
+  display: grid;
+  gap: 12px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+  text-align: left;
+}
+
+.time-history-list li {
+  display: grid;
+  gap: 5px;
+  padding: 14px;
+  background: white;
+  border: 1px solid var(--line);
+}
+
+.time-history-list strong {
+  color: var(--heading-color);
+}
+
+.time-history-list span,
+.time-history-list small {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.time-save-toast {
+  position: fixed;
+  top: 22px;
+  left: 50%;
+  z-index: 70;
+  padding: 12px 18px;
+  color: white;
+  font-weight: 800;
+  background: var(--black);
+  border: 1px solid rgba(216, 163, 41, 0.7);
+  box-shadow: 0 18px 42px rgba(31, 23, 24, 0.24);
+  transform: translateX(-50%);
+  animation: toastFade 3s ease both;
+}
+
+@keyframes toastFade {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -8px);
+  }
+
+  12%,
+  82% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -8px);
+  }
 }
 
 .time-table td span {

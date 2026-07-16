@@ -171,6 +171,15 @@ function getDb() {
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (client_id) REFERENCES time_clients(id) ON DELETE CASCADE
       );
+
+      CREATE TABLE IF NOT EXISTS time_entry_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        entry_id INTEGER NOT NULL,
+        event_type TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        detail TEXT,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
     `)
 
     migrateGalleryItems()
@@ -782,6 +791,72 @@ function getMonthLabel(monthKey) {
   }).format(new Date(Date.UTC(year, month - 1, 1)))
 }
 
+function normalizeTimeValue(value) {
+  return Number(Number(value || 0).toFixed(4))
+}
+
+function formatEventHours(value) {
+  const totalSeconds = Math.round((Number(value) || 0) * 3600)
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  const parts = []
+
+  if (hours) parts.push(`${hours} hr${hours === 1 ? '' : 's'}`)
+  if (minutes) parts.push(`${minutes} min`)
+  if (seconds || !parts.length) parts.push(`${seconds} sec`)
+
+  return parts.join(' ')
+}
+
+function mapTimeEntryEvent(row) {
+  return {
+    id: row.id,
+    entryId: row.entry_id,
+    eventType: row.event_type,
+    summary: row.summary,
+    detail: row.detail || '',
+    createdAt: row.created_at,
+  }
+}
+
+function createTimeEntryEvent(entryId, eventType, summary, detail = '') {
+  if (!entryId || !eventType || !summary) {
+    return null
+  }
+
+  const result = getDb()
+    .prepare(
+      `
+        INSERT INTO time_entry_events
+          (entry_id, event_type, summary, detail)
+        VALUES (?, ?, ?, ?)
+      `,
+    )
+    .run(entryId, eventType, summary, detail || '')
+
+  return getTimeEntryEvent(result.lastInsertRowid)
+}
+
+function getTimeEntryEvent(id) {
+  const row = getDb().prepare('SELECT * FROM time_entry_events WHERE id = ?').get(id)
+  return row ? mapTimeEntryEvent(row) : null
+}
+
+function getTimeEntryEvents(entryId) {
+  return getDb()
+    .prepare(
+      `
+        SELECT *
+        FROM time_entry_events
+        WHERE entry_id = ?
+        ORDER BY created_at DESC, id DESC
+      `,
+    )
+    .all(entryId)
+    .map(mapTimeEntryEvent)
+}
+
 function mapTimeClient(row) {
   return {
     id: row.id,
@@ -927,7 +1002,69 @@ function getTimeEntry(id) {
   return row ? mapTimeEntry(row) : null
 }
 
-function createTimeEntry(payload) {
+const timeEntryChangeFields = [
+  ['clientId', 'Client', 'client'],
+  ['projectName', 'Project name', 'text'],
+  ['editingStartDate', 'Start date', 'text'],
+  ['editingEndDate', 'End date', 'text'],
+  ['filmingHours', 'Filming', 'hours'],
+  ['drivingHours', 'Driving', 'hours'],
+  ['editingHours', 'Editing', 'hours'],
+  ['projectFee', 'Project fee', 'currency'],
+  ['notes', 'Notes', 'notes'],
+]
+
+function formatEventValue(value, kind) {
+  if (kind === 'hours') {
+    return formatEventHours(value)
+  }
+
+  if (kind === 'currency') {
+    return `$${Number(value || 0).toFixed(2)}`
+  }
+
+  if (kind === 'notes') {
+    return value ? 'set' : 'blank'
+  }
+
+  return value || 'blank'
+}
+
+function getTimeEntryChanges(existing, updated) {
+  const changes = []
+
+  for (const [key, label, kind] of timeEntryChangeFields) {
+    const previousValue = kind === 'hours' || kind === 'currency'
+      ? normalizeTimeValue(existing[key])
+      : String(existing[key] || '')
+    const nextValue = kind === 'hours' || kind === 'currency'
+      ? normalizeTimeValue(updated[key])
+      : String(updated[key] || '')
+
+    if (previousValue === nextValue) {
+      continue
+    }
+
+    if (kind === 'notes') {
+      changes.push({
+        type: 'manual_update',
+        summary: 'Notes updated',
+        detail: `Notes changed from ${formatEventValue(existing[key], kind)} to ${formatEventValue(updated[key], kind)}`,
+      })
+      continue
+    }
+
+    changes.push({
+      type: 'manual_update',
+      summary: `${label} changed from ${formatEventValue(existing[key], kind)} to ${formatEventValue(updated[key], kind)}`,
+      detail: '',
+    })
+  }
+
+  return changes
+}
+
+function createTimeEntry(payload, options = {}) {
   const result = getDb()
     .prepare(
       `
@@ -958,10 +1095,17 @@ function createTimeEntry(payload) {
       payload.notes || '',
     )
 
-  return getTimeEntry(result.lastInsertRowid)
+  const entry = getTimeEntry(result.lastInsertRowid)
+  createTimeEntryEvent(
+    entry.id,
+    options.eventType || 'entry_created',
+    options.eventSummary || `${formatEventHours(entry.totalHours)} logged manually`,
+  )
+
+  return entry
 }
 
-function updateTimeEntry(id, payload) {
+function updateTimeEntry(id, payload, options = {}) {
   const existing = getTimeEntry(id)
 
   if (!existing) {
@@ -999,11 +1143,27 @@ function updateTimeEntry(id, payload) {
       id,
     )
 
-  return getTimeEntry(id)
+  const updated = getTimeEntry(id)
+
+  if (options.eventSummary) {
+    createTimeEntryEvent(id, options.eventType || 'timer_saved', options.eventSummary, options.eventDetail || '')
+  } else {
+    for (const change of getTimeEntryChanges(existing, updated)) {
+      createTimeEntryEvent(id, change.type, change.summary, change.detail)
+    }
+  }
+
+  return updated
 }
 
 function deleteTimeEntry(id) {
+  const existing = getTimeEntry(id)
   const result = getDb().prepare('DELETE FROM time_entries WHERE id = ?').run(id)
+
+  if (result.changes > 0 && existing) {
+    createTimeEntryEvent(id, 'entry_deleted', `${existing.projectName} deleted`)
+  }
+
   return result.changes > 0
 }
 
@@ -1089,6 +1249,7 @@ export {
   createAdminSession,
   createTimeClient,
   createTimeEntry,
+  createTimeEntryEvent,
   deleteAdminSession,
   deleteJob,
   deleteTimeClient,
@@ -1104,6 +1265,7 @@ export {
   getTimeClient,
   getTimeClients,
   getTimeEntry,
+  getTimeEntryEvents,
   getTimeEntries,
   getTimeTrackerDashboard,
   reorderGalleryItems,
