@@ -239,6 +239,8 @@ const timeChartCanvas = ref(null)
 let timeChartInstance = null
 let timeTimerInterval = null
 let timeSaveToastTimeout = null
+let isBodyScrollLocked = false
+let previousBodyOverflow = ''
 const applicationForm = ref({
   name: '',
   age: '',
@@ -285,6 +287,20 @@ const page = computed(() => {
 
   return 'home'
 })
+
+const hasOpenModal = computed(() =>
+  Boolean(
+    selectedGalleryItem.value ||
+      selectedJob.value ||
+      isTimeClientModalOpen.value ||
+      isTimeProjectModalOpen.value ||
+      editingTimeEntry.value ||
+      selectedTimerEntry.value ||
+      selectedHistoryEntry.value ||
+      pendingDeleteTimeEntry.value ||
+      pendingClearTimerEntry.value,
+  ),
+)
 
 const selectedAdminItem = computed(() =>
   adminItems.value.find((item) => item.id === selectedAdminItemId.value),
@@ -1370,6 +1386,61 @@ function formatEventTimestamp(timestamp) {
   }).format(new Date(normalizedTimestamp))
 }
 
+function getTimeEntryEventIcon(eventType = '') {
+  if (eventType.includes('started') || eventType.includes('resumed')) {
+    return '▶'
+  }
+
+  if (eventType.includes('paused')) {
+    return 'Ⅱ'
+  }
+
+  if (eventType.includes('stopped')) {
+    return '■'
+  }
+
+  if (eventType.includes('saved')) {
+    return '✓'
+  }
+
+  if (eventType.includes('added') || eventType.includes('created')) {
+    return '+'
+  }
+
+  if (eventType.includes('removed')) {
+    return '−'
+  }
+
+  if (eventType.includes('deleted') || eventType.includes('cleared') || eventType.includes('reset')) {
+    return '!'
+  }
+
+  if (eventType.includes('duplicated')) {
+    return '⧉'
+  }
+
+  if (eventType.includes('updated') || eventType.includes('changed')) {
+    return '✎'
+  }
+
+  return '•'
+}
+
+function setBodyScrollLock(shouldLock) {
+  if (shouldLock && !isBodyScrollLocked) {
+    previousBodyOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    isBodyScrollLocked = true
+    return
+  }
+
+  if (!shouldLock && isBodyScrollLocked) {
+    document.body.style.overflow = previousBodyOverflow
+    previousBodyOverflow = ''
+    isBodyScrollLocked = false
+  }
+}
+
 async function startTimeEntryTimer(entry) {
   const timer = getTimeEntryTimer(entry.id)
 
@@ -1988,10 +2059,12 @@ onUnmounted(() => {
   if (timeSaveToastTimeout) {
     window.clearTimeout(timeSaveToastTimeout)
   }
+  setBodyScrollLock(false)
   destroyTimeChart()
 })
 
 watch(timeChartSignature, renderTimeChart)
+watch(hasOpenModal, setBodyScrollLock)
 </script>
 
 <template>
@@ -3044,24 +3117,34 @@ watch(timeChartSignature, renderTimeChart)
           aria-labelledby="time-history-modal-title"
           @click.self="closeTimeEntryHistory"
         >
-          <div class="time-entry-modal-panel">
-            <div class="time-entry-modal-header">
+          <div class="time-entry-modal-panel time-history-modal-panel">
+            <div class="time-history-header">
               <div>
                 <p class="eyebrow">Log history</p>
                 <h2 id="time-history-modal-title">{{ selectedHistoryEntry.projectName }}</h2>
               </div>
-              <button class="secondary-action compact" type="button" @click="closeTimeEntryHistory">
-                Close
+              <button class="time-history-close" type="button" aria-label="Close log history" @click="closeTimeEntryHistory">
+                <span aria-hidden="true">×</span>
+                <span>Close</span>
               </button>
             </div>
-            <p v-if="historyStatus" class="time-history-status">{{ historyStatus }}</p>
-            <ul v-else class="time-history-list">
-              <li v-for="event in selectedHistoryEvents" :key="event.id">
-                <strong>{{ event.summary }}</strong>
-                <span>{{ formatEventTimestamp(event.createdAt) }}</span>
-                <small v-if="event.detail">{{ event.detail }}</small>
-              </li>
-            </ul>
+            <div class="time-history-scroll">
+              <p v-if="historyStatus" class="time-history-status">{{ historyStatus }}</p>
+              <ul v-else class="time-history-list">
+                <li v-for="event in selectedHistoryEvents" :key="event.id">
+                  <span class="time-history-icon" aria-hidden="true">
+                    {{ getTimeEntryEventIcon(event.eventType) }}
+                  </span>
+                  <span class="time-history-copy">
+                    <strong>{{ event.summary }}</strong>
+                    <small v-if="event.detail">{{ event.detail }}</small>
+                  </span>
+                  <time class="time-history-time" :datetime="event.createdAt">
+                    {{ formatEventTimestamp(event.createdAt) }}
+                  </time>
+                </li>
+              </ul>
+            </div>
           </div>
         </section>
 
