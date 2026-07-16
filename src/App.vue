@@ -833,6 +833,12 @@ function formatTimerDuration(milliseconds) {
   return [hours, minutes, seconds].map((unit) => String(unit).padStart(2, '0')).join(':')
 }
 
+function getTimerDurationParts(milliseconds) {
+  const [hours, minutes, seconds] = formatTimerDuration(milliseconds).split(':')
+
+  return { hours, minutes, seconds }
+}
+
 function formatCurrency(value) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) {
     return '--'
@@ -1271,6 +1277,20 @@ function getTimeEntryTimerControlIcon(entryId) {
   }
 
   return '▶'
+}
+
+function getTimeEntryTimerControlLabel(entryId) {
+  const status = getTimeEntryTimerStatus(entryId)
+
+  if (status === 'running') {
+    return 'Pause'
+  }
+
+  if (status === 'paused') {
+    return 'Resume'
+  }
+
+  return 'Start'
 }
 
 function openTimeActions(entryId) {
@@ -2948,46 +2968,70 @@ watch(timeChartSignature, renderTimeChart)
           @click.self="selectedTimerEntryId = null"
         >
           <div class="time-entry-modal-panel time-timer-modal-panel">
-            <div class="time-entry-modal-header">
-              <div>
-                <p class="eyebrow">Project timer</p>
-                <h2 id="time-timer-modal-title">{{ selectedTimerEntry.projectName }}</h2>
-                <p>{{ getTimeEntryTimerStatus(selectedTimerEntry.id) }}</p>
-              </div>
-              <button class="secondary-action compact" type="button" @click="selectedTimerEntryId = null">
+            <div class="time-timer-hero">
+              <button class="time-timer-close" type="button" aria-label="Close timer" @click="selectedTimerEntryId = null">
+                <span aria-hidden="true">×</span>
                 Close
               </button>
+              <p class="time-timer-kicker">
+                <span aria-hidden="true">⏱</span>
+                Project Timer
+              </p>
+              <h2 id="time-timer-modal-title">{{ selectedTimerEntry.projectName }}</h2>
+              <div class="time-timer-divider" aria-hidden="true">
+                <span></span>
+                <strong>{{ getTimeEntryTimerStatus(selectedTimerEntry.id) }}</strong>
+                <span></span>
+              </div>
+              <div class="time-timer-display" aria-label="Current timer">
+                <div>
+                  <strong>{{ getTimerDurationParts(getTimeEntryTimerElapsed(selectedTimerEntry.id)).hours }}</strong>
+                  <span>Hours</span>
+                </div>
+                <b aria-hidden="true">:</b>
+                <div>
+                  <strong>{{ getTimerDurationParts(getTimeEntryTimerElapsed(selectedTimerEntry.id)).minutes }}</strong>
+                  <span>Minutes</span>
+                </div>
+                <b aria-hidden="true">:</b>
+                <div>
+                  <strong>{{ getTimerDurationParts(getTimeEntryTimerElapsed(selectedTimerEntry.id)).seconds }}</strong>
+                  <span>Seconds</span>
+                </div>
+              </div>
             </div>
-            <strong class="time-timer-readout">
-              {{ formatTimerDuration(getTimeEntryTimerElapsed(selectedTimerEntry.id)) }}
-            </strong>
-            <p class="time-timer-helper">
-              Saved editing time: {{ formatHours(selectedTimerEntry.editingHours) }}.
-              Timer saves add to this total.
-            </p>
-            <div class="time-timer-icon-controls" aria-label="Timer controls">
-              <button
-                class="secondary-action icon-action"
-                type="button"
-                :aria-label="getTimeEntryTimerStatus(selectedTimerEntry.id) === 'running' ? 'Pause timer' : 'Start or resume timer'"
-                :title="getTimeEntryTimerStatus(selectedTimerEntry.id) === 'running' ? 'Pause' : 'Start or resume'"
-                @click="
-                  getTimeEntryTimerStatus(selectedTimerEntry.id) === 'running'
-                    ? pauseTimeEntryTimer(selectedTimerEntry)
-                    : startTimeEntryTimer(selectedTimerEntry)
-                "
-              >
-                <span aria-hidden="true">{{ getTimeEntryTimerControlIcon(selectedTimerEntry.id) }}</span>
-              </button>
-              <button class="secondary-action icon-action" type="button" aria-label="Stop timer" title="Stop" @click="stopTimeEntryTimer(selectedTimerEntry)">
-                <span aria-hidden="true">■</span>
-              </button>
-              <button class="secondary-action icon-action" type="button" aria-label="Save timer" title="Save" @click="saveTimeEntryTimer(selectedTimerEntry, getTimeEntryTimerStatus(selectedTimerEntry.id), 'Timer saved')">
-                <span aria-hidden="true">💾</span>
-              </button>
-              <button class="secondary-action icon-action danger-action" type="button" aria-label="Clear timer" title="Clear" @click="requestClearTimeEntryTimer(selectedTimerEntry)">
-                <span aria-hidden="true">⌫</span>
-              </button>
+            <div class="time-timer-body">
+              <div class="time-timer-total">
+                <span aria-hidden="true">◷</span>
+                <p>
+                  Editing Time:
+                  <strong>{{ formatHours(selectedTimerEntry.editingHours) }}.</strong>
+                  <small>Timer saves add to this total.</small>
+                </p>
+              </div>
+              <div class="time-timer-icon-controls" aria-label="Timer controls">
+                <button
+                  class="timer-control-button"
+                  type="button"
+                  :aria-label="`${getTimeEntryTimerControlLabel(selectedTimerEntry.id)} timer`"
+                  @click="
+                    getTimeEntryTimerStatus(selectedTimerEntry.id) === 'running'
+                      ? pauseTimeEntryTimer(selectedTimerEntry)
+                      : startTimeEntryTimer(selectedTimerEntry)
+                  "
+                >
+                  <span aria-hidden="true">{{ getTimeEntryTimerControlIcon(selectedTimerEntry.id) }}</span>
+                  {{ getTimeEntryTimerControlLabel(selectedTimerEntry.id) }}
+                </button>
+                <button class="timer-control-button" type="button" aria-label="Stop timer" @click="stopTimeEntryTimer(selectedTimerEntry)">
+                  <span aria-hidden="true">■</span>
+                  Stop
+                </button>
+                <button class="timer-control-button is-danger" type="button" aria-label="Reset timer" @click="requestClearTimeEntryTimer(selectedTimerEntry)">
+                  <span aria-hidden="true">×</span>
+                  Reset
+                </button>
+              </div>
             </div>
           </div>
         </section>
