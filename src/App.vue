@@ -1414,40 +1414,42 @@ function formatEventTimestamp(timestamp) {
   }).format(new Date(normalizedTimestamp))
 }
 
-function getTimeEntryEventIcon(eventType = '') {
-  if (eventType.includes('started') || eventType.includes('resumed')) {
+function getTimeEntryEventIcon(eventType = '', summary = '', detail = '') {
+  const eventText = `${eventType} ${summary} ${detail}`.toLowerCase()
+
+  if (eventText.includes('started') || eventText.includes('resumed')) {
     return '▶'
   }
 
-  if (eventType.includes('paused')) {
+  if (eventText.includes('paused')) {
     return 'Ⅱ'
   }
 
-  if (eventType.includes('stopped')) {
+  if (eventText.includes('stopped')) {
     return '■'
   }
 
-  if (eventType.includes('saved')) {
+  if (eventText.includes('saved')) {
     return '✓'
   }
 
-  if (eventType.includes('added') || eventType.includes('created')) {
+  if (eventText.includes('added') || eventText.includes('created')) {
     return '+'
   }
 
-  if (eventType.includes('removed')) {
+  if (eventText.includes('removed')) {
     return '−'
   }
 
-  if (eventType.includes('deleted') || eventType.includes('cleared') || eventType.includes('reset')) {
+  if (eventText.includes('deleted') || eventText.includes('cleared') || eventText.includes('reset')) {
     return '!'
   }
 
-  if (eventType.includes('duplicated')) {
+  if (eventText.includes('duplicated')) {
     return '⧉'
   }
 
-  if (eventType.includes('updated') || eventType.includes('changed')) {
+  if (eventText.includes('updated') || eventText.includes('changed')) {
     return '✎'
   }
 
@@ -3162,7 +3164,7 @@ watch(hasOpenModal, setBodyScrollLock)
               <ul v-else class="time-history-list">
                 <li v-for="event in selectedHistoryEvents" :key="event.id">
                   <span class="time-history-icon" aria-hidden="true">
-                    {{ getTimeEntryEventIcon(event.eventType) }}
+                    {{ getTimeEntryEventIcon(event.eventType, event.summary, event.detail) }}
                   </span>
                   <span class="time-history-copy">
                     <strong>{{ event.summary }}</strong>
