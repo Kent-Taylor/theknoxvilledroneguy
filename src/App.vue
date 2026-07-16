@@ -159,6 +159,7 @@ const legalLinks = [
   { name: 'Privacy Policy', path: '/privacy-policy' },
   { name: 'Terms of Service', path: '/terms-of-service' },
 ]
+const TIME_ENTRY_TIMER_STORAGE_KEY = 'knoxville-drone-guy-time-entry-timers'
 
 const currentPath = ref(window.location.pathname)
 const galleryItems = ref([])
@@ -176,6 +177,11 @@ const isTimeProjectModalOpen = ref(false)
 const activeTimeChartTab = ref('weekly-hours')
 const expandedJobIds = ref(new Set())
 const expandedTimeNoteIds = ref(new Set())
+const expandedTimeTimerIds = ref(new Set())
+const timeEntryTimers = ref({})
+const timeTimerTick = ref(Date.now())
+const pendingDeleteTimeEntry = ref(null)
+const pendingClearTimerEntry = ref(null)
 const visibleGalleryCount = ref(20)
 const galleryStatus = ref('Loading gallery...')
 const galleryError = ref('')
@@ -225,6 +231,7 @@ const jobEditor = ref(null)
 const selectedJob = ref(null)
 const timeChartCanvas = ref(null)
 let timeChartInstance = null
+let timeTimerInterval = null
 const applicationForm = ref({
   name: '',
   age: '',
@@ -781,6 +788,19 @@ function formatHours(value) {
   return `${Number(value || 0).toFixed(2)} hrs`
 }
 
+function millisecondsToHours(milliseconds) {
+  return Number(milliseconds || 0) / 3600000
+}
+
+function formatTimerDuration(milliseconds) {
+  const totalSeconds = Math.max(0, Math.floor(Number(milliseconds || 0) / 1000))
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+
+  return [hours, minutes, seconds].map((unit) => String(unit).padStart(2, '0')).join(':')
+}
+
 function formatCurrency(value) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) {
     return '--'
@@ -1141,6 +1161,162 @@ function duplicateTimeEntry(entry) {
   isTimeProjectModalOpen.value = true
 }
 
+function loadTimeEntryTimers() {
+  try {
+    const storedTimers = JSON.parse(localStorage.getItem(TIME_ENTRY_TIMER_STORAGE_KEY) || '{}')
+
+    if (storedTimers && typeof storedTimers === 'object') {
+      timeEntryTimers.value = storedTimers
+    }
+  } catch {
+    timeEntryTimers.value = {}
+  }
+}
+
+function persistTimeEntryTimers() {
+  localStorage.setItem(TIME_ENTRY_TIMER_STORAGE_KEY, JSON.stringify(timeEntryTimers.value))
+}
+
+function getTimeEntryTimer(entryId) {
+  return (
+    timeEntryTimers.value[entryId] || {
+      status: 'idle',
+      startedAt: null,
+      savedMs: 0,
+      unsavedMs: 0,
+      updatedAt: null,
+    }
+  )
+}
+
+function getTimeEntryTimerElapsed(entryId) {
+  const timer = getTimeEntryTimer(entryId)
+  const runningMs =
+    timer.status === 'running' && timer.startedAt
+      ? Math.max(0, timeTimerTick.value - Number(timer.startedAt))
+      : 0
+
+  return (Number(timer.savedMs) || 0) + (Number(timer.unsavedMs) || 0) + runningMs
+}
+
+function getTimeEntryTimerStatus(entryId) {
+  return getTimeEntryTimer(entryId).status || 'idle'
+}
+
+function isTimeTimerExpanded(entryId) {
+  return expandedTimeTimerIds.value.has(entryId)
+}
+
+function toggleTimeTimer(entryId) {
+  const nextExpandedTimers = new Set(expandedTimeTimerIds.value)
+
+  if (nextExpandedTimers.has(entryId)) {
+    nextExpandedTimers.delete(entryId)
+  } else {
+    nextExpandedTimers.add(entryId)
+  }
+
+  expandedTimeTimerIds.value = nextExpandedTimers
+}
+
+function upsertTimeEntryTimer(entryId, timerPatch) {
+  timeEntryTimers.value = {
+    ...timeEntryTimers.value,
+    [entryId]: {
+      ...getTimeEntryTimer(entryId),
+      ...timerPatch,
+      updatedAt: Date.now(),
+    },
+  }
+  persistTimeEntryTimers()
+}
+
+function startTimeEntryTimer(entry) {
+  const timer = getTimeEntryTimer(entry.id)
+
+  if (timer.status === 'running') {
+    return
+  }
+
+  upsertTimeEntryTimer(entry.id, {
+    status: 'running',
+    startedAt: Date.now(),
+  })
+}
+
+function getTimeEntryTimerUnsavedMs(entryId) {
+  const timer = getTimeEntryTimer(entryId)
+  const runningMs =
+    timer.status === 'running' && timer.startedAt
+      ? Math.max(0, Date.now() - Number(timer.startedAt))
+      : 0
+
+  return (Number(timer.unsavedMs) || 0) + runningMs
+}
+
+async function saveTimeEntryTimer(entry, nextStatus = getTimeEntryTimerStatus(entry.id)) {
+  const timer = getTimeEntryTimer(entry.id)
+  const unsavedMs = getTimeEntryTimerUnsavedMs(entry.id)
+  const keepsRunning = nextStatus === 'running'
+
+  if (unsavedMs <= 0) {
+    upsertTimeEntryTimer(entry.id, {
+      status: nextStatus,
+      startedAt: keepsRunning ? Date.now() : null,
+    })
+    return
+  }
+
+  timeSaveStatus.value = 'Saving timer...'
+
+  try {
+    const nextEditingHours = Number(entry.editingHours || 0) + millisecondsToHours(unsavedMs)
+
+    await fetchJson(`/api/time-tracker/entries/${entry.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        ...entry,
+        editingHours: Number(nextEditingHours.toFixed(4)),
+      }),
+    })
+
+    upsertTimeEntryTimer(entry.id, {
+      status: nextStatus,
+      startedAt: keepsRunning ? Date.now() : null,
+      savedMs: (Number(timer.savedMs) || 0) + unsavedMs,
+      unsavedMs: 0,
+    })
+    await loadTimeTracker()
+    timeSaveStatus.value = nextStatus === 'stopped' ? 'Timer stopped and saved' : 'Timer saved'
+  } catch (error) {
+    timeSaveStatus.value = error.message
+  }
+}
+
+async function pauseTimeEntryTimer(entry) {
+  await saveTimeEntryTimer(entry, 'paused')
+}
+
+async function stopTimeEntryTimer(entry) {
+  await saveTimeEntryTimer(entry, 'stopped')
+}
+
+function requestClearTimeEntryTimer(entry) {
+  pendingClearTimerEntry.value = entry
+}
+
+function clearTimeEntryTimer() {
+  if (!pendingClearTimerEntry.value) {
+    return
+  }
+
+  const nextTimers = { ...timeEntryTimers.value }
+  delete nextTimers[pendingClearTimerEntry.value.id]
+  timeEntryTimers.value = nextTimers
+  persistTimeEntryTimers()
+  pendingClearTimerEntry.value = null
+}
+
 function closeTimeEntryModal() {
   editingTimeEntry.value = null
   timeEntryModalForm.value = {
@@ -1210,10 +1386,20 @@ async function removeTimeEntryFromModal() {
 
   const entry = editingTimeEntry.value
   closeTimeEntryModal()
-  await removeTimeEntry(entry)
+  requestRemoveTimeEntry(entry)
 }
 
-async function removeTimeEntry(entry) {
+function requestRemoveTimeEntry(entry) {
+  pendingDeleteTimeEntry.value = entry
+}
+
+async function confirmRemoveTimeEntry() {
+  const entry = pendingDeleteTimeEntry.value
+
+  if (!entry) {
+    return
+  }
+
   timeSaveStatus.value = `Deleting ${entry.projectName}...`
 
   try {
@@ -1221,6 +1407,11 @@ async function removeTimeEntry(entry) {
     if (timeEntryForm.value.id === entry.id) {
       resetTimeEntryForm()
     }
+    const nextTimers = { ...timeEntryTimers.value }
+    delete nextTimers[entry.id]
+    timeEntryTimers.value = nextTimers
+    persistTimeEntryTimers()
+    pendingDeleteTimeEntry.value = null
     await loadTimeTracker()
     timeSaveStatus.value = 'Entry deleted'
   } catch (error) {
@@ -1607,6 +1798,10 @@ function uploadThumbnail(item, event) {
 
 onMounted(() => {
   normalizeRoute()
+  loadTimeEntryTimers()
+  timeTimerInterval = window.setInterval(() => {
+    timeTimerTick.value = Date.now()
+  }, 1000)
   window.addEventListener('popstate', handlePopState)
   window.addEventListener('scroll', handleGalleryScroll, { passive: true })
   loadGallery()
@@ -1617,6 +1812,9 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('popstate', handlePopState)
   window.removeEventListener('scroll', handleGalleryScroll)
+  if (timeTimerInterval) {
+    window.clearInterval(timeTimerInterval)
+  }
   destroyTimeChart()
 })
 
@@ -2469,6 +2667,50 @@ watch(timeChartSignature, renderTimeChart)
                   </td>
                   <td>
                     <div class="time-row-actions">
+                      <button
+                        class="secondary-action compact timer-action"
+                        type="button"
+                        :aria-expanded="isTimeTimerExpanded(entry.id)"
+                        @click="toggleTimeTimer(entry.id)"
+                      >
+                        <span aria-hidden="true">⏱</span>
+                        Timer
+                      </button>
+                      <div v-if="isTimeTimerExpanded(entry.id)" class="time-timer-panel">
+                        <strong>{{ formatTimerDuration(getTimeEntryTimerElapsed(entry.id)) }}</strong>
+                        <span>{{ getTimeEntryTimerStatus(entry.id) }}</span>
+                        <div class="time-timer-controls">
+                          <button
+                            v-if="getTimeEntryTimerStatus(entry.id) === 'running'"
+                            class="secondary-action compact"
+                            type="button"
+                            @click="pauseTimeEntryTimer(entry)"
+                          >
+                            Pause
+                          </button>
+                          <button
+                            v-else
+                            class="secondary-action compact"
+                            type="button"
+                            @click="startTimeEntryTimer(entry)"
+                          >
+                            {{ getTimeEntryTimerStatus(entry.id) === 'idle' ? 'Start' : 'Resume' }}
+                          </button>
+                          <button class="secondary-action compact" type="button" @click="stopTimeEntryTimer(entry)">
+                            Stop
+                          </button>
+                          <button class="secondary-action compact" type="button" @click="saveTimeEntryTimer(entry)">
+                            Save
+                          </button>
+                          <button
+                            class="secondary-action compact danger-action"
+                            type="button"
+                            @click="requestClearTimeEntryTimer(entry)"
+                          >
+                            Clear
+                          </button>
+                        </div>
+                      </div>
                       <button class="secondary-action compact" type="button" @click="editTimeEntry(entry)">
                         Edit
                       </button>
@@ -2478,7 +2720,7 @@ watch(timeChartSignature, renderTimeChart)
                       <button
                         class="secondary-action compact danger-action"
                         type="button"
-                        @click="removeTimeEntry(entry)"
+                        @click="requestRemoveTimeEntry(entry)"
                       >
                         Delete
                       </button>
@@ -2562,6 +2804,64 @@ watch(timeChartSignature, renderTimeChart)
               </button>
             </div>
           </form>
+        </section>
+
+        <section
+          v-if="pendingDeleteTimeEntry"
+          class="time-entry-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-time-entry-title"
+          @click.self="pendingDeleteTimeEntry = null"
+        >
+          <div class="time-entry-modal-panel confirm-panel">
+            <div>
+              <p class="eyebrow">Confirm delete</p>
+              <h2 id="delete-time-entry-title">Delete this project?</h2>
+              <p>
+                This will permanently delete
+                <strong>{{ pendingDeleteTimeEntry.projectName }}</strong>
+                from the time tracker.
+              </p>
+            </div>
+            <div class="hero-actions">
+              <button class="secondary-action" type="button" @click="pendingDeleteTimeEntry = null">
+                Cancel
+              </button>
+              <button class="secondary-action danger-action" type="button" @click="confirmRemoveTimeEntry">
+                Delete project
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section
+          v-if="pendingClearTimerEntry"
+          class="time-entry-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="clear-time-timer-title"
+          @click.self="pendingClearTimerEntry = null"
+        >
+          <div class="time-entry-modal-panel confirm-panel">
+            <div>
+              <p class="eyebrow">Confirm clear</p>
+              <h2 id="clear-time-timer-title">Clear this timer?</h2>
+              <p>
+                This clears the stopwatch session for
+                <strong>{{ pendingClearTimerEntry.projectName }}</strong>.
+                Hours already saved to the project will stay saved.
+              </p>
+            </div>
+            <div class="hero-actions">
+              <button class="secondary-action" type="button" @click="pendingClearTimerEntry = null">
+                Cancel
+              </button>
+              <button class="secondary-action danger-action" type="button" @click="clearTimeEntryTimer">
+                Clear timer
+              </button>
+            </div>
+          </div>
         </section>
       </section>
 

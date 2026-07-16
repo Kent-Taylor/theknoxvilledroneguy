@@ -334,6 +334,10 @@ h3 {
   padding: 0 12px;
 }
 
+.time-row-actions .timer-action {
+  gap: 6px;
+}
+
 .hero-media {
   position: relative;
   min-height: 620px;
@@ -1396,6 +1400,43 @@ h3 {
   justify-content: center;
 }
 
+.time-timer-panel {
+  display: grid;
+  gap: 8px;
+  width: 118px;
+  padding: 10px;
+  text-align: center;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  box-shadow: 0 8px 20px rgba(83, 54, 62, 0.08);
+}
+
+.time-timer-panel strong {
+  color: var(--heading-color);
+  font-size: 0.92rem;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.time-timer-panel span {
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.time-timer-controls {
+  display: grid;
+  gap: 6px;
+}
+
+.time-timer-controls .secondary-action.compact {
+  width: 100%;
+  min-height: 34px;
+  padding: 0 10px;
+}
+
 .time-client-actions {
   padding-top: 8px;
   border-top: 1px solid rgba(3, 3, 3, 0.08);
@@ -1825,6 +1866,15 @@ h3 {
   background: white;
   border: 1px solid var(--line);
   border-radius: 0;
+}
+
+.confirm-panel p {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.confirm-panel p strong {
+  color: var(--ink);
 }
 
 .time-table td span {
