@@ -2069,7 +2069,7 @@ h3 {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
   gap: clamp(8px, 2vw, 22px);
-  align-items: center;
+  align-items: start;
   width: min(700px, 100%);
   margin: 0 auto;
   padding: clamp(22px, 4vw, 34px);
@@ -2082,6 +2082,7 @@ h3 {
 .time-timer-display div {
   display: grid;
   gap: 12px;
+  justify-items: center;
 }
 
 .time-timer-display strong,
@@ -2092,6 +2093,14 @@ h3 {
   line-height: 0.9;
   font-variant-numeric: tabular-nums;
   text-shadow: 0 8px 28px rgba(216, 163, 41, 0.18);
+}
+
+.time-timer-display b {
+  display: flex;
+  align-items: center;
+  align-self: start;
+  height: clamp(3.06rem, 9.9vw, 6.3rem);
+  line-height: 1;
 }
 
 .time-timer-display span {

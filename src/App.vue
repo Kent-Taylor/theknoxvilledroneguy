@@ -1104,6 +1104,34 @@ async function reloadTimeTrackerWithoutJump() {
   window.scrollTo(scrollX, scrollY)
 }
 
+function updateTimeEntryInTracker(updatedEntry) {
+  if (!timeTracker.value?.clients || !updatedEntry?.id) {
+    return
+  }
+
+  timeTracker.value = {
+    ...timeTracker.value,
+    clients: timeTracker.value.clients.map((client) => ({
+      ...client,
+      entries: (client.entries || []).map((entry) =>
+        String(entry.id) === String(updatedEntry.id) ? { ...entry, ...updatedEntry } : entry,
+      ),
+    })),
+  }
+}
+
+async function refreshTimeTrackerQuietly() {
+  const currentStatus = timeTrackerStatus.value
+
+  try {
+    await loadTimeTracker()
+  } catch {
+    timeTrackerStatus.value = currentStatus
+  } finally {
+    timeTrackerStatus.value = currentStatus
+  }
+}
+
 function showTimeSaveToast(message = 'Changes saved') {
   timeSaveToast.value = message
 
@@ -1492,7 +1520,7 @@ async function saveTimeEntryTimer(entry, nextStatus = getTimeEntryTimerStatus(en
   try {
     const nextEditingHours = Number(entry.editingHours || 0) + millisecondsToHours(unsavedMs)
 
-    await fetchJson(`/api/time-tracker/entries/${entry.id}`, {
+    const updatedEntry = await fetchJson(`/api/time-tracker/entries/${entry.id}`, {
       method: 'PATCH',
       body: JSON.stringify({
         ...entry,
@@ -1501,6 +1529,7 @@ async function saveTimeEntryTimer(entry, nextStatus = getTimeEntryTimerStatus(en
         _eventSummary: `+${formatSecondsAsDuration(unsavedMs / 1000)} added by timer`,
       }),
     })
+    updateTimeEntryInTracker(updatedEntry)
 
     upsertTimeEntryTimer(entry.id, {
       status: nextStatus,
@@ -1511,7 +1540,7 @@ async function saveTimeEntryTimer(entry, nextStatus = getTimeEntryTimerStatus(en
     if (eventSummary) {
       await logTimeEntryEvent(entry, nextStatus === 'paused' ? 'timer_paused' : 'timer_stopped', eventSummary)
     }
-    await reloadTimeTrackerWithoutJump()
+    refreshTimeTrackerQuietly()
     timeSaveStatus.value = nextStatus === 'stopped' ? 'Timer stopped and saved' : 'Timer saved'
     showTimeSaveToast()
   } catch (error) {
