@@ -7,6 +7,7 @@ import {
   getTimeClient,
   getTimeEntry,
   getTimeEntryEvents,
+  getTimeEntryEventsForExport,
   getTimeTrackerDashboard,
   updateTimeClient,
   updateTimeEntry,
@@ -40,6 +41,13 @@ function cleanNumber(value, fieldName) {
   }
 
   return number
+}
+
+function cleanProjectType(value) {
+  const allowedTypes = new Set(['long_form', 'tht', 'reel', 'other'])
+  const projectType = cleanText(value) || 'other'
+
+  return allowedTypes.has(projectType) ? projectType : 'other'
 }
 
 function validateClientPayload(body) {
@@ -88,6 +96,7 @@ function validateEntryPayload(body) {
     projectName,
     editingStartDate,
     editingEndDate,
+    projectType: cleanProjectType(body.projectType),
     filmingHours: cleanNumber(body.filmingHours, 'Filming hours'),
     drivingHours: cleanNumber(body.drivingHours, 'Driving hours'),
     editingHours: cleanNumber(body.editingHours, 'Editing hours'),
@@ -135,6 +144,11 @@ async function handleTimeTrackerApi(req, res) {
 
   if (req.method === 'GET' && path === '/api/time-tracker') {
     jsonResponse(res, 200, getTimeTrackerDashboard())
+    return true
+  }
+
+  if (req.method === 'GET' && path === '/api/time-tracker/events') {
+    jsonResponse(res, 200, getTimeEntryEventsForExport())
     return true
   }
 

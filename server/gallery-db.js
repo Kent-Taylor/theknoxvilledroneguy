@@ -165,6 +165,7 @@ function getDb() {
         filming_hours REAL NOT NULL DEFAULT 0,
         driving_hours REAL NOT NULL DEFAULT 0,
         editing_hours REAL NOT NULL DEFAULT 0,
+        project_type TEXT NOT NULL DEFAULT 'other',
         project_fee REAL NOT NULL DEFAULT 0,
         notes TEXT,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -264,6 +265,7 @@ function migrateTimeTracker() {
   ]
   const entryMigrations = [
     ['project_fee', 'ALTER TABLE time_entries ADD COLUMN project_fee REAL NOT NULL DEFAULT 0'],
+    ['project_type', "ALTER TABLE time_entries ADD COLUMN project_type TEXT NOT NULL DEFAULT 'other'"],
   ]
 
   for (const [columnName, statement] of clientMigrations) {
@@ -857,6 +859,36 @@ function getTimeEntryEvents(entryId) {
     .map(mapTimeEntryEvent)
 }
 
+function getTimeEntryEventsForExport() {
+  return getDb()
+    .prepare(
+      `
+        SELECT
+          time_entry_events.*,
+          time_entries.project_name,
+          time_entries.editing_start_date,
+          time_entries.editing_end_date,
+          time_entries.project_type,
+          time_clients.id AS client_id,
+          time_clients.name AS client_name
+        FROM time_entry_events
+        JOIN time_entries ON time_entries.id = time_entry_events.entry_id
+        JOIN time_clients ON time_clients.id = time_entries.client_id
+        ORDER BY time_entry_events.created_at DESC, time_entry_events.id DESC
+      `,
+    )
+    .all()
+    .map((row) => ({
+      ...mapTimeEntryEvent(row),
+      clientId: row.client_id,
+      clientName: row.client_name || '',
+      projectName: row.project_name || '',
+      projectType: row.project_type || 'other',
+      editingStartDate: row.editing_start_date || '',
+      editingEndDate: row.editing_end_date || '',
+    }))
+}
+
 function mapTimeClient(row) {
   return {
     id: row.id,
@@ -884,6 +916,7 @@ function mapTimeEntry(row) {
     projectName: row.project_name,
     editingStartDate: row.editing_start_date,
     editingEndDate: row.editing_end_date || '',
+    projectType: row.project_type || 'other',
     filmingHours,
     drivingHours,
     editingHours,
@@ -1007,6 +1040,7 @@ const timeEntryChangeFields = [
   ['projectName', 'Project name', 'text'],
   ['editingStartDate', 'Start date', 'text'],
   ['editingEndDate', 'End date', 'text'],
+  ['projectType', 'Project type', 'text'],
   ['filmingHours', 'Filming', 'hours'],
   ['drivingHours', 'Driving', 'hours'],
   ['editingHours', 'Editing', 'hours'],
@@ -1077,10 +1111,11 @@ function createTimeEntry(payload, options = {}) {
             filming_hours,
             driving_hours,
             editing_hours,
+            project_type,
             project_fee,
             notes
           )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
     )
     .run(
@@ -1091,6 +1126,7 @@ function createTimeEntry(payload, options = {}) {
       payload.filmingHours,
       payload.drivingHours,
       payload.editingHours,
+      payload.projectType || 'other',
       payload.projectFee,
       payload.notes || '',
     )
@@ -1124,6 +1160,7 @@ function updateTimeEntry(id, payload, options = {}) {
           filming_hours = ?,
           driving_hours = ?,
           editing_hours = ?,
+          project_type = ?,
           project_fee = ?,
           notes = ?,
           updated_at = CURRENT_TIMESTAMP
@@ -1138,6 +1175,7 @@ function updateTimeEntry(id, payload, options = {}) {
       payload.filmingHours ?? existing.filmingHours,
       payload.drivingHours ?? existing.drivingHours,
       payload.editingHours ?? existing.editingHours,
+      payload.projectType ?? existing.projectType,
       payload.projectFee ?? existing.projectFee,
       payload.notes ?? existing.notes,
       id,
@@ -1266,6 +1304,7 @@ export {
   getTimeClients,
   getTimeEntry,
   getTimeEntryEvents,
+  getTimeEntryEventsForExport,
   getTimeEntries,
   getTimeTrackerDashboard,
   reorderGalleryItems,

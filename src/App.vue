@@ -159,6 +159,12 @@ const legalLinks = [
   { name: 'Privacy Policy', path: '/privacy-policy' },
   { name: 'Terms of Service', path: '/terms-of-service' },
 ]
+const projectTypeOptions = [
+  { value: 'long_form', label: 'Long Form' },
+  { value: 'tht', label: 'THT' },
+  { value: 'reel', label: 'Reel' },
+  { value: 'other', label: 'Other' },
+]
 const TIME_ENTRY_TIMER_STORAGE_KEY = 'knoxville-drone-guy-time-entry-timers'
 
 const currentPath = ref(window.location.pathname)
@@ -172,6 +178,8 @@ const timeSaveStatus = ref('')
 const ALL_TIME_CLIENTS_ID = 'all'
 const selectedTimeClientId = ref(ALL_TIME_CLIENTS_ID)
 const selectedTimeMonth = ref('all')
+const selectedTimeStartDate = ref('')
+const selectedTimeEndDate = ref('')
 const isTimeClientModalOpen = ref(false)
 const isTimeProjectModalOpen = ref(false)
 const activeTimeChartTab = ref('weekly-hours')
@@ -212,6 +220,7 @@ const timeEntryForm = ref({
   id: null,
   clientId: '',
   projectName: '',
+  projectType: 'other',
   editingStartDate: '',
   editingEndDate: '',
   filmingHours: 0,
@@ -224,6 +233,7 @@ const timeEntryModalForm = ref({
   id: null,
   clientId: '',
   projectName: '',
+  projectType: 'other',
   editingStartDate: '',
   editingEndDate: '',
   filmingHours: 0,
@@ -359,13 +369,13 @@ const timeMonthOptions = computed(() => {
   return [...monthMap.values()].sort((a, b) => b.key.localeCompare(a.key))
 })
 const filteredTimeEntries = computed(() => {
-  if (selectedTimeMonth.value === 'all') {
-    return scopedTimeEntries.value
-  }
+  return scopedTimeEntries.value.filter((entry) => {
+    const matchesMonth =
+      selectedTimeMonth.value === 'all' ||
+      getMonthBucket(entry.editingStartDate)?.key === selectedTimeMonth.value
 
-  return scopedTimeEntries.value.filter(
-    (entry) => getMonthBucket(entry.editingStartDate)?.key === selectedTimeMonth.value,
-  )
+    return matchesMonth && isTimeEntryInSelectedDateRange(entry)
+  })
 })
 const timeTrackerSummary = computed(() =>
   buildTimeDashboardSummary({
@@ -447,9 +457,34 @@ const averageWeeklyHours = computed(() => {
 const maxWeeklyHours = computed(() =>
   weeklyTrackerHours.value.reduce((max, week) => Math.max(max, week.hours), 0),
 )
+const projectTypeMonthlyBuckets = computed(() => {
+  const bucketMap = new Map()
+
+  for (const entry of timeTrackerSummary.value.entries || []) {
+    const month = getMonthBucket(entry.editingStartDate)
+
+    if (!month) {
+      continue
+    }
+
+    const bucket = bucketMap.get(month.key) || {
+      ...month,
+      counts: Object.fromEntries(projectTypeOptions.map((type) => [type.value, 0])),
+    }
+    const projectType = projectTypeOptions.some((type) => type.value === entry.projectType)
+      ? entry.projectType
+      : 'other'
+
+    bucket.counts[projectType] += 1
+    bucketMap.set(month.key, bucket)
+  }
+
+  return [...bucketMap.values()].sort((a, b) => a.key.localeCompare(b.key))
+})
 const timeChartTabs = computed(() => [
   { id: 'weekly-hours', label: 'Weekly Hours' },
   { id: 'monthly-hours', label: 'Monthly Hours' },
+  { id: 'project-types', label: 'Project Types' },
   { id: 'income', label: 'Income' },
   { id: 'effective-rate', label: 'Effective Rate' },
   { id: 'incomplete-work', label: 'Incomplete Work' },
@@ -505,6 +540,21 @@ const timeChartData = computed(() => {
           : []),
       ],
       unit: 'hrs',
+    },
+    'project-types': {
+      title: 'Project types by month',
+      helper: 'Counts Long Form, THT, Reel, and Other projects by editing start month.',
+      labels: projectTypeMonthlyBuckets.value.map((month) => month.label),
+      datasets: projectTypeOptions.map((type) => ({
+        type: 'bar',
+        label: type.label,
+        data: projectTypeMonthlyBuckets.value.map((month) => month.counts[type.value] || 0),
+        backgroundColor: getProjectTypeColor(type.value),
+        borderColor: getProjectTypeColor(type.value),
+        borderWidth: 1,
+      })),
+      unit: 'count',
+      stacked: true,
     },
     income: {
       title: 'Income by month',
@@ -567,6 +617,8 @@ const timeChartSignature = computed(() =>
     page: page.value,
     clientId: selectedTimeClientId.value || '',
     month: selectedTimeMonth.value,
+    startDate: selectedTimeStartDate.value,
+    endDate: selectedTimeEndDate.value,
     chart: activeTimeChart.value,
   }),
 )
@@ -632,6 +684,54 @@ function formatShortDate(value) {
     year: 'numeric',
     timeZone: 'UTC',
   }).format(new Date(`${value}T00:00:00Z`))
+}
+
+function getProjectTypeLabel(value) {
+  return projectTypeOptions.find((type) => type.value === value)?.label || 'Other'
+}
+
+function getProjectTypeColor(value) {
+  return (
+    {
+      long_form: 'rgba(216, 163, 41, 0.82)',
+      tht: 'rgba(47, 66, 31, 0.78)',
+      reel: 'rgba(15, 118, 110, 0.72)',
+      other: 'rgba(127, 29, 29, 0.64)',
+    }[value] || 'rgba(139, 125, 128, 0.7)'
+  )
+}
+
+function isDateInRange(value, startDate, endDate) {
+  if (!value) {
+    return !startDate && !endDate
+  }
+
+  if (startDate && value < startDate) {
+    return false
+  }
+
+  if (endDate && value > endDate) {
+    return false
+  }
+
+  return true
+}
+
+function isTimeEntryInSelectedDateRange(entry) {
+  return isDateInRange(entry.editingStartDate, selectedTimeStartDate.value, selectedTimeEndDate.value)
+}
+
+function getTimeExportRangeLabel() {
+  if (!selectedTimeStartDate.value && !selectedTimeEndDate.value) {
+    return 'All dates'
+  }
+
+  return `${selectedTimeStartDate.value || 'Beginning'} to ${selectedTimeEndDate.value || 'Today'}`
+}
+
+function clearTimeDateRange() {
+  selectedTimeStartDate.value = ''
+  selectedTimeEndDate.value = ''
 }
 
 function getWeekBucket(value) {
@@ -939,6 +1039,7 @@ async function renderTimeChart() {
       },
       scales: {
         x: {
+          stacked: Boolean(activeTimeChart.value.stacked),
           grid: {
             display: false,
           },
@@ -952,6 +1053,7 @@ async function renderTimeChart() {
           },
         },
         y: {
+          stacked: Boolean(activeTimeChart.value.stacked),
           beginAtZero: true,
           grid: {
             color: 'rgba(36, 25, 26, 0.08)',
@@ -966,6 +1068,177 @@ async function renderTimeChart() {
       },
     },
   })
+}
+
+function getExportDateSlug() {
+  return `${selectedTimeStartDate.value || 'all'}_to_${selectedTimeEndDate.value || 'latest'}`
+}
+
+function escapeCsvCell(value) {
+  const text = String(value ?? '')
+  return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text
+}
+
+function downloadTextFile(filename, text, mimeType = 'text/csv;charset=utf-8') {
+  const blob = new Blob([text], { type: mimeType })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
+function downloadCsv(filename, headers, rows) {
+  const csv = [
+    headers.map(escapeCsvCell).join(','),
+    ...rows.map((row) => headers.map((header) => escapeCsvCell(row[header])).join(',')),
+  ].join('\n')
+
+  downloadTextFile(filename, csv)
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;')
+}
+
+function getScopedExportLogs(logs) {
+  return logs.filter((event) => {
+    const matchesClient =
+      isAllTimeClientsSelected.value || String(event.clientId) === String(selectedTimeClientId.value)
+    const matchesMonth =
+      selectedTimeMonth.value === 'all' ||
+      getMonthBucket(event.editingStartDate)?.key === selectedTimeMonth.value
+
+    return matchesClient && matchesMonth && isDateInRange(event.editingStartDate, selectedTimeStartDate.value, selectedTimeEndDate.value)
+  })
+}
+
+function exportProjectsCsv() {
+  downloadCsv(
+    `time-projects_${getExportDateSlug()}.csv`,
+    [
+      'Client',
+      'Project',
+      'Type',
+      'Start',
+      'End',
+      'Filming',
+      'Driving',
+      'Editing',
+      'Total',
+      'Fee',
+      'Rate',
+      'Notes',
+    ],
+    timeTrackerSummary.value.entries.map((entry) => ({
+      Client: entry.clientName,
+      Project: entry.projectName,
+      Type: getProjectTypeLabel(entry.projectType),
+      Start: entry.editingStartDate,
+      End: entry.editingEndDate,
+      Filming: entry.filmingHours,
+      Driving: entry.drivingHours,
+      Editing: entry.editingHours,
+      Total: entry.totalHours,
+      Fee: entry.projectFee,
+      Rate: entry.effectiveHourlyRate || '',
+      Notes: entry.notes,
+    })),
+  )
+}
+
+function exportWeeklyCsv() {
+  downloadCsv(
+    `time-weekly-hours_${getExportDateSlug()}.csv`,
+    ['Week', 'Projects', 'Hours'],
+    weeklyTrackerHours.value.map((week) => ({
+      Week: week.label,
+      Projects: week.projects,
+      Hours: week.hours,
+    })),
+  )
+}
+
+function exportMonthlyCsv() {
+  downloadCsv(
+    `time-monthly-summary_${getExportDateSlug()}.csv`,
+    ['Month', 'Projects', 'Hours', 'Revenue', 'Effective Rate', 'Incomplete Entries'],
+    timeTrackerSummary.value.months.map((month) => ({
+      Month: month.label,
+      Projects: month.projects,
+      Hours: month.hours,
+      Revenue: month.revenue,
+      'Effective Rate': month.effectiveHourlyRate || '',
+      'Incomplete Entries': month.incompleteCount || 0,
+    })),
+  )
+}
+
+async function exportLogsCsv() {
+  try {
+    const logs = getScopedExportLogs(await fetchJson('/api/time-tracker/events'))
+    downloadCsv(
+      `time-logs_${getExportDateSlug()}.csv`,
+      ['Client', 'Project', 'Type', 'Event', 'Detail', 'Log Time', 'Start', 'End'],
+      logs.map((event) => ({
+        Client: event.clientName,
+        Project: event.projectName,
+        Type: getProjectTypeLabel(event.projectType),
+        Event: event.summary,
+        Detail: event.detail,
+        'Log Time': formatEventTimestamp(event.createdAt),
+        Start: event.editingStartDate,
+        End: event.editingEndDate,
+      })),
+    )
+  } catch (error) {
+    timeSaveStatus.value = `Log export failed: ${error.message}`
+  }
+}
+
+function exportActiveChartPdf() {
+  if (!timeChartInstance || !activeTimeChartHasData.value) {
+    timeSaveStatus.value = 'There is no chart data to export yet.'
+    return
+  }
+
+  const chartImage = timeChartInstance.toBase64Image('image/png', 1)
+  const popup = window.open('', '_blank')
+
+  if (!popup) {
+    timeSaveStatus.value = 'Allow popups to export the chart as a PDF.'
+    return
+  }
+
+  popup.document.write(`
+    <!doctype html>
+    <html>
+      <head>
+        <title>${escapeHtml(activeTimeChart.value.title)}</title>
+        <style>
+          body { margin: 32px; color: #3f3638; font-family: Arial, sans-serif; }
+          h1 { margin: 0 0 6px; font-size: 28px; }
+          p { margin: 0 0 22px; color: #6f6468; }
+          img { width: 100%; max-width: 960px; border: 1px solid #e5d8c1; }
+        </style>
+      </head>
+      <body>
+        <h1>${escapeHtml(activeTimeChart.value.title)}</h1>
+        <p>${escapeHtml(timeTrackerSummary.value.name)} · ${escapeHtml(getTimeExportRangeLabel())}</p>
+        <img src="${chartImage}" alt="${escapeHtml(activeTimeChart.value.title)}" />
+        <script>window.addEventListener('load', () => window.print())<\/script>
+      </body>
+    </html>
+  `)
+  popup.document.close()
 }
 
 async function fetchJson(url, options = {}) {
@@ -1224,6 +1497,7 @@ function resetTimeEntryForm() {
     id: null,
     clientId: selectedTimeClient.value?.id || timeTrackerClients.value[0]?.id || '',
     projectName: '',
+    projectType: 'other',
     editingStartDate: '',
     editingEndDate: '',
     filmingHours: 0,
@@ -1240,6 +1514,7 @@ function editTimeEntry(entry) {
     id: entry.id,
     clientId: entry.clientId,
     projectName: entry.projectName,
+    projectType: entry.projectType || 'other',
     editingStartDate: entry.editingStartDate,
     editingEndDate: entry.editingEndDate,
     filmingHours: entry.filmingHours,
@@ -1256,6 +1531,7 @@ function duplicateTimeEntry(entry) {
     id: null,
     clientId: entry.clientId,
     projectName: entry.projectName,
+    projectType: entry.projectType || 'other',
     editingStartDate: '',
     editingEndDate: '',
     filmingHours: 0,
@@ -1583,6 +1859,7 @@ function closeTimeEntryModal() {
     id: null,
     clientId: '',
     projectName: '',
+    projectType: 'other',
     editingStartDate: '',
     editingEndDate: '',
     filmingHours: 0,
@@ -2648,6 +2925,14 @@ watch(hasOpenModal, setBodyScrollLock)
               Project or video name
               <input v-model="timeEntryForm.projectName" required />
             </label>
+            <label>
+              Project type
+              <select v-model="timeEntryForm.projectType">
+                <option v-for="type in projectTypeOptions" :key="type.value" :value="type.value">
+                  {{ type.label }}
+                </option>
+              </select>
+            </label>
             <div class="time-form-row">
               <label>
                 Start date
@@ -2706,6 +2991,41 @@ watch(hasOpenModal, setBodyScrollLock)
               </option>
             </select>
           </label>
+          <label>
+            Start date
+            <input v-model="selectedTimeStartDate" type="date" />
+          </label>
+          <label>
+            End date
+            <input v-model="selectedTimeEndDate" type="date" />
+          </label>
+        </section>
+
+        <section class="time-export-panel" aria-label="Time tracker exports">
+          <div>
+            <p class="eyebrow">Export</p>
+            <h2>{{ getTimeExportRangeLabel() }}</h2>
+          </div>
+          <div class="time-export-actions">
+            <button class="secondary-action compact" type="button" @click="clearTimeDateRange">
+              Clear range
+            </button>
+            <button class="primary-action compact" type="button" @click="exportActiveChartPdf">
+              Chart PDF
+            </button>
+            <button class="secondary-action compact" type="button" @click="exportProjectsCsv">
+              Projects CSV
+            </button>
+            <button class="secondary-action compact" type="button" @click="exportLogsCsv">
+              Logs CSV
+            </button>
+            <button class="secondary-action compact" type="button" @click="exportWeeklyCsv">
+              Weekly CSV
+            </button>
+            <button class="secondary-action compact" type="button" @click="exportMonthlyCsv">
+              Monthly CSV
+            </button>
+          </div>
         </section>
 
         <div class="time-summary-grid">
@@ -2895,6 +3215,7 @@ watch(hasOpenModal, setBodyScrollLock)
               <thead>
                 <tr>
                   <th>Project</th>
+                  <th>Type</th>
                   <th>Start</th>
                   <th>End</th>
                   <th>Filming</th>
@@ -2926,6 +3247,9 @@ watch(hasOpenModal, setBodyScrollLock)
                     >
                       {{ isTimeNoteExpanded(entry.id) ? 'Show less' : 'Read more' }}
                     </button>
+                  </td>
+                  <td>
+                    <span class="project-type-pill">{{ getProjectTypeLabel(entry.projectType) }}</span>
                   </td>
                   <td :class="{ 'is-incomplete-cell': !entry.editingStartDate }">
                     {{ formatShortDate(entry.editingStartDate) || 'Missing' }}
@@ -2985,7 +3309,7 @@ watch(hasOpenModal, setBodyScrollLock)
                   </td>
                 </tr>
                 <tr v-if="!timeTrackerSummary.entries?.length">
-                  <td :colspan="shouldShowTimeMoneyColumns ? 10 : 8">No project entries for this view yet.</td>
+                  <td :colspan="shouldShowTimeMoneyColumns ? 11 : 9">No project entries for this view yet.</td>
                 </tr>
               </tbody>
             </table>
@@ -3021,6 +3345,14 @@ watch(hasOpenModal, setBodyScrollLock)
             <label>
               Project or video name
               <input v-model="timeEntryModalForm.projectName" required />
+            </label>
+            <label>
+              Project type
+              <select v-model="timeEntryModalForm.projectType">
+                <option v-for="type in projectTypeOptions" :key="type.value" :value="type.value">
+                  {{ type.label }}
+                </option>
+              </select>
             </label>
             <div class="time-form-row">
               <label>

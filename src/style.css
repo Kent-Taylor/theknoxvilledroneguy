@@ -1385,7 +1385,8 @@ h3 {
   text-transform: uppercase;
 }
 
-.time-dashboard-controls select {
+.time-dashboard-controls select,
+.time-dashboard-controls input {
   min-height: 46px;
   padding: 10px 12px;
   color: var(--ink);
@@ -1394,6 +1395,30 @@ h3 {
   text-transform: none;
   background: var(--paper);
   border: 1px solid var(--line);
+}
+
+.time-export-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px;
+  background: var(--blush);
+  border: 1px solid rgba(3, 3, 3, 0.08);
+  box-shadow: 0 14px 36px rgba(83, 54, 62, 0.08);
+}
+
+.time-export-panel h2 {
+  margin: 0;
+  font-size: clamp(1.1rem, 2vw, 1.55rem);
+}
+
+.time-export-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
 }
 
 .time-row-actions {
@@ -1810,7 +1835,7 @@ h3 {
 
 .time-table {
   width: 100%;
-  min-width: 980px;
+  min-width: 1080px;
   border-collapse: collapse;
   font-size: 0.92rem;
 }
@@ -1866,6 +1891,27 @@ h3 {
   max-width: 320px;
   overflow: visible;
   -webkit-line-clamp: unset;
+}
+
+.project-type-pill {
+  display: inline-flex;
+  justify-content: center;
+  min-width: 78px;
+  padding: 6px 10px;
+  color: var(--heading-color);
+  font-size: 0.74rem;
+  font-weight: 850;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: var(--blush);
+  border: 1px solid rgba(216, 163, 41, 0.34);
+}
+
+.time-table td .project-type-pill {
+  display: inline-flex;
+  margin-top: 0;
+  color: var(--heading-color);
+  line-height: 1.2;
 }
 
 .time-note-toggle {
@@ -3257,6 +3303,7 @@ code {
   .time-admin-panel,
   .time-admin-launch-card,
   .time-dashboard-controls,
+  .time-export-panel,
   .time-summary-grid,
   .time-insight-band,
   .time-chart-card,
@@ -3309,6 +3356,15 @@ code {
   .time-table-heading {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .time-export-panel {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .time-export-actions {
+    justify-content: flex-start;
   }
 
   .time-week-row {
@@ -3547,6 +3603,8 @@ code {
   }
 
   .time-client-actions .secondary-action,
+  .time-export-actions .primary-action,
+  .time-export-actions .secondary-action,
   .time-entry-modal-panel .hero-actions .primary-action,
   .time-entry-modal-panel .hero-actions .secondary-action {
     width: 100%;
