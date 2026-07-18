@@ -180,6 +180,8 @@ const selectedTimeClientId = ref(ALL_TIME_CLIENTS_ID)
 const selectedTimeMonth = ref('all')
 const selectedTimeStartDate = ref('')
 const selectedTimeEndDate = ref('')
+const timeProjectSearch = ref('')
+const timeTableSort = ref({ key: 'editingStartDate', direction: 'desc' })
 const isTimeClientModalOpen = ref(false)
 const isTimeProjectModalOpen = ref(false)
 const activeTimeChartTab = ref('weekly-hours')
@@ -229,6 +231,11 @@ const timeEntryForm = ref({
   projectFee: 0,
   notes: '',
 })
+const timeEntryDurationForm = ref({
+  filming: { hours: 0, minutes: 0 },
+  driving: { hours: 0, minutes: 0 },
+  editing: { hours: 0, minutes: 0 },
+})
 const timeEntryModalForm = ref({
   id: null,
   clientId: '',
@@ -241,6 +248,11 @@ const timeEntryModalForm = ref({
   editingHours: 0,
   projectFee: 0,
   notes: '',
+})
+const timeEntryModalDurationForm = ref({
+  filming: { hours: 0, minutes: 0 },
+  driving: { hours: 0, minutes: 0 },
+  editing: { hours: 0, minutes: 0 },
 })
 const editingTimeEntry = ref(null)
 const jobEditor = ref(null)
@@ -369,13 +381,15 @@ const timeMonthOptions = computed(() => {
   return [...monthMap.values()].sort((a, b) => b.key.localeCompare(a.key))
 })
 const filteredTimeEntries = computed(() => {
-  return scopedTimeEntries.value.filter((entry) => {
+  const entries = scopedTimeEntries.value.filter((entry) => {
     const matchesMonth =
       selectedTimeMonth.value === 'all' ||
       getMonthBucket(entry.editingStartDate)?.key === selectedTimeMonth.value
 
-    return matchesMonth && isTimeEntryInSelectedDateRange(entry)
+    return matchesMonth && isTimeEntryInSelectedDateRange(entry) && doesTimeEntryMatchSearch(entry)
   })
+
+  return sortTimeEntries(entries)
 })
 const timeTrackerSummary = computed(() =>
   buildTimeDashboardSummary({
@@ -619,6 +633,7 @@ const timeChartSignature = computed(() =>
     month: selectedTimeMonth.value,
     startDate: selectedTimeStartDate.value,
     endDate: selectedTimeEndDate.value,
+    search: timeProjectSearch.value,
     chart: activeTimeChart.value,
   }),
 )
@@ -693,12 +708,172 @@ function getProjectTypeLabel(value) {
 function getProjectTypeColor(value) {
   return (
     {
-      long_form: 'rgba(216, 163, 41, 0.82)',
-      tht: 'rgba(47, 66, 31, 0.78)',
-      reel: 'rgba(15, 118, 110, 0.72)',
-      other: 'rgba(127, 29, 29, 0.64)',
-    }[value] || 'rgba(139, 125, 128, 0.7)'
+      long_form: 'rgba(245, 206, 83, 0.82)',
+      tht: 'rgba(128, 195, 235, 0.78)',
+      reel: 'rgba(147, 211, 154, 0.78)',
+      other: 'rgba(219, 219, 219, 0.86)',
+    }[value] || 'rgba(219, 219, 219, 0.86)'
   )
+}
+
+function getProjectTypeClass(value) {
+  return `is-${projectTypeOptions.some((type) => type.value === value) ? value : 'other'}`
+}
+
+function getTimeEntryStatusText(entry) {
+  const statuses = []
+  const timerStatus = getTimeEntryTimerStatus(entry.id)
+
+  if (!entry.editingStartDate || !entry.editingEndDate) {
+    statuses.push('needs date', 'draft')
+  }
+
+  if (Number(entry.totalHours || 0) <= 0) {
+    statuses.push('needs hours', 'draft')
+  }
+
+  if (!statuses.length) {
+    statuses.push('complete')
+  }
+
+  if (timerStatus !== 'idle') {
+    statuses.push(timerStatus)
+  }
+
+  return statuses.join(' ')
+}
+
+function doesTimeEntryMatchSearch(entry) {
+  const terms = timeProjectSearch.value
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+
+  if (!terms.length) {
+    return true
+  }
+
+  const searchText = [
+    entry.projectName,
+    entry.notes,
+    entry.clientName,
+    getProjectTypeLabel(entry.projectType),
+    getTimeEntryStatusText(entry),
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+
+  return terms.every((term) => searchText.includes(term))
+}
+
+function setTimeTableSort(key) {
+  if (timeTableSort.value.key === key) {
+    timeTableSort.value = {
+      key,
+      direction: timeTableSort.value.direction === 'desc' ? 'asc' : 'desc',
+    }
+    return
+  }
+
+  timeTableSort.value = { key, direction: 'desc' }
+}
+
+function getTimeColumnSortState(key) {
+  if (timeTableSort.value.key !== key) {
+    return 'none'
+  }
+
+  return timeTableSort.value.direction === 'desc' ? 'descending' : 'ascending'
+}
+
+function getTimeSortIndicator(key) {
+  if (timeTableSort.value.key !== key) {
+    return ''
+  }
+
+  return timeTableSort.value.direction === 'desc' ? ' v' : ' ^'
+}
+
+function getTimeSortValue(entry, key) {
+  if (key === 'projectType') {
+    return getProjectTypeLabel(entry.projectType).toLowerCase()
+  }
+
+  if (key === 'editingStartDate' || key === 'editingEndDate') {
+    return entry[key] ? new Date(`${entry[key]}T00:00:00Z`).getTime() : 0
+  }
+
+  if (key === 'effectiveHourlyRate') {
+    return Number(entry.effectiveHourlyRate) || 0
+  }
+
+  return Number(entry[key]) || 0
+}
+
+function sortTimeEntries(entries) {
+  const { key, direction } = timeTableSort.value
+  const directionMultiplier = direction === 'desc' ? -1 : 1
+
+  return [...entries].sort((a, b) => {
+    const aValue = getTimeSortValue(a, key)
+    const bValue = getTimeSortValue(b, key)
+
+    if (typeof aValue === 'string' || typeof bValue === 'string') {
+      return String(aValue).localeCompare(String(bValue)) * directionMultiplier
+    }
+
+    return (aValue - bValue) * directionMultiplier
+  })
+}
+
+function normalizeDurationNumber(value, max = null) {
+  const numberValue = Math.max(0, Math.floor(Number(value) || 0))
+
+  if (max === null) {
+    return numberValue
+  }
+
+  return Math.min(max, numberValue)
+}
+
+function durationFieldsToHours(duration) {
+  const hours = normalizeDurationNumber(duration?.hours)
+  const minutes = normalizeDurationNumber(duration?.minutes, 59)
+
+  return Number((hours + minutes / 60).toFixed(4))
+}
+
+function setDurationFieldsFromHours(durationForm, key, value) {
+  const totalMinutes = Math.max(0, Math.round((Number(value) || 0) * 60))
+  durationForm[key] = {
+    hours: Math.floor(totalMinutes / 60),
+    minutes: totalMinutes % 60,
+  }
+}
+
+function setDurationFieldsFromEntry(durationForm, entry) {
+  setDurationFieldsFromHours(durationForm, 'filming', entry?.filmingHours)
+  setDurationFieldsFromHours(durationForm, 'driving', entry?.drivingHours)
+  setDurationFieldsFromHours(durationForm, 'editing', entry?.editingHours)
+}
+
+function resetDurationForm(durationForm) {
+  durationForm.value = {
+    filming: { hours: 0, minutes: 0 },
+    driving: { hours: 0, minutes: 0 },
+    editing: { hours: 0, minutes: 0 },
+  }
+}
+
+function buildTimeEntryPayload(form, durationForm) {
+  return {
+    ...form,
+    filmingHours: durationFieldsToHours(durationForm.filming),
+    drivingHours: durationFieldsToHours(durationForm.driving),
+    editingHours: durationFieldsToHours(durationForm.editing),
+  }
 }
 
 function isDateInRange(value, startDate, endDate) {
@@ -1506,6 +1681,7 @@ function resetTimeEntryForm() {
     projectFee: 0,
     notes: '',
   }
+  resetDurationForm(timeEntryDurationForm)
 }
 
 function editTimeEntry(entry) {
@@ -1523,6 +1699,7 @@ function editTimeEntry(entry) {
     projectFee: entry.projectFee,
     notes: entry.notes,
   }
+  setDurationFieldsFromEntry(timeEntryModalDurationForm.value, entry)
 }
 
 function duplicateTimeEntry(entry) {
@@ -1540,6 +1717,7 @@ function duplicateTimeEntry(entry) {
     projectFee: 0,
     notes: entry.notes || '',
   }
+  resetDurationForm(timeEntryDurationForm)
   isTimeProjectModalOpen.value = true
 }
 
@@ -1868,6 +2046,7 @@ function closeTimeEntryModal() {
     projectFee: 0,
     notes: '',
   }
+  resetDurationForm(timeEntryModalDurationForm)
 }
 
 async function saveTimeEntry() {
@@ -1875,6 +2054,7 @@ async function saveTimeEntry() {
 
   try {
     const isEditing = Boolean(timeEntryForm.value.id)
+    const payload = buildTimeEntryPayload(timeEntryForm.value, timeEntryDurationForm.value)
     await fetchJson(
       isEditing
         ? `/api/time-tracker/entries/${timeEntryForm.value.id}`
@@ -1882,7 +2062,7 @@ async function saveTimeEntry() {
       {
         method: isEditing ? 'PATCH' : 'POST',
         body: JSON.stringify({
-          ...timeEntryForm.value,
+          ...payload,
           ...(duplicateSourceEntryName.value && !isEditing
             ? {
                 _eventType: 'entry_duplicated',
@@ -1913,9 +2093,10 @@ async function saveTimeEntryModal() {
   timeSaveStatus.value = 'Updating entry...'
 
   try {
+    const payload = buildTimeEntryPayload(timeEntryModalForm.value, timeEntryModalDurationForm.value)
     await fetchJson(`/api/time-tracker/entries/${editingTimeEntry.value.id}`, {
       method: 'PATCH',
-      body: JSON.stringify(timeEntryModalForm.value),
+      body: JSON.stringify(payload),
     })
 
     await reloadTimeTrackerWithoutJump()
@@ -2944,18 +3125,39 @@ watch(hasOpenModal, setBodyScrollLock)
               </label>
             </div>
             <div class="time-form-row three">
-              <label>
-                Filming
-                <input v-model.number="timeEntryForm.filmingHours" min="0" step="0.25" type="number" />
-              </label>
-              <label>
-                Driving
-                <input v-model.number="timeEntryForm.drivingHours" min="0" step="0.25" type="number" />
-              </label>
-              <label>
-                Editing
-                <input v-model.number="timeEntryForm.editingHours" min="0" step="0.25" type="number" />
-              </label>
+              <fieldset class="time-duration-field">
+                <legend>Filming</legend>
+                <label>
+                  Hours
+                  <input v-model.number="timeEntryDurationForm.filming.hours" min="0" step="1" type="number" />
+                </label>
+                <label>
+                  Minutes
+                  <input v-model.number="timeEntryDurationForm.filming.minutes" min="0" max="59" step="1" type="number" />
+                </label>
+              </fieldset>
+              <fieldset class="time-duration-field">
+                <legend>Driving</legend>
+                <label>
+                  Hours
+                  <input v-model.number="timeEntryDurationForm.driving.hours" min="0" step="1" type="number" />
+                </label>
+                <label>
+                  Minutes
+                  <input v-model.number="timeEntryDurationForm.driving.minutes" min="0" max="59" step="1" type="number" />
+                </label>
+              </fieldset>
+              <fieldset class="time-duration-field">
+                <legend>Editing</legend>
+                <label>
+                  Hours
+                  <input v-model.number="timeEntryDurationForm.editing.hours" min="0" step="1" type="number" />
+                </label>
+                <label>
+                  Minutes
+                  <input v-model.number="timeEntryDurationForm.editing.minutes" min="0" max="59" step="1" type="number" />
+                </label>
+              </fieldset>
             </div>
             <label v-if="isSelectedEntryClientProjectBased">
               Project fee
@@ -2998,6 +3200,14 @@ watch(hasOpenModal, setBodyScrollLock)
           <label>
             End date
             <input v-model="selectedTimeEndDate" type="date" />
+          </label>
+          <label>
+            Search projects
+            <input
+              v-model="timeProjectSearch"
+              type="search"
+              placeholder="Title, notes, type, or status"
+            />
           </label>
         </section>
 
@@ -3215,15 +3425,51 @@ watch(hasOpenModal, setBodyScrollLock)
               <thead>
                 <tr>
                   <th>Project</th>
-                  <th>Type</th>
-                  <th>Start</th>
-                  <th>End</th>
-                  <th>Filming</th>
-                  <th>Driving</th>
-                  <th>Editing</th>
-                  <th>Total</th>
-                  <th v-if="shouldShowTimeMoneyColumns">Fee</th>
-                  <th v-if="shouldShowTimeMoneyColumns">Rate</th>
+                  <th :aria-sort="getTimeColumnSortState('projectType')">
+                    <button class="time-sort-button" type="button" @click="setTimeTableSort('projectType')">
+                      Type{{ getTimeSortIndicator('projectType') }}
+                    </button>
+                  </th>
+                  <th :aria-sort="getTimeColumnSortState('editingStartDate')">
+                    <button class="time-sort-button" type="button" @click="setTimeTableSort('editingStartDate')">
+                      Start{{ getTimeSortIndicator('editingStartDate') }}
+                    </button>
+                  </th>
+                  <th :aria-sort="getTimeColumnSortState('editingEndDate')">
+                    <button class="time-sort-button" type="button" @click="setTimeTableSort('editingEndDate')">
+                      End{{ getTimeSortIndicator('editingEndDate') }}
+                    </button>
+                  </th>
+                  <th :aria-sort="getTimeColumnSortState('filmingHours')">
+                    <button class="time-sort-button" type="button" @click="setTimeTableSort('filmingHours')">
+                      Filming{{ getTimeSortIndicator('filmingHours') }}
+                    </button>
+                  </th>
+                  <th :aria-sort="getTimeColumnSortState('drivingHours')">
+                    <button class="time-sort-button" type="button" @click="setTimeTableSort('drivingHours')">
+                      Driving{{ getTimeSortIndicator('drivingHours') }}
+                    </button>
+                  </th>
+                  <th :aria-sort="getTimeColumnSortState('editingHours')">
+                    <button class="time-sort-button" type="button" @click="setTimeTableSort('editingHours')">
+                      Editing{{ getTimeSortIndicator('editingHours') }}
+                    </button>
+                  </th>
+                  <th :aria-sort="getTimeColumnSortState('totalHours')">
+                    <button class="time-sort-button" type="button" @click="setTimeTableSort('totalHours')">
+                      Total{{ getTimeSortIndicator('totalHours') }}
+                    </button>
+                  </th>
+                  <th v-if="shouldShowTimeMoneyColumns" :aria-sort="getTimeColumnSortState('projectFee')">
+                    <button class="time-sort-button" type="button" @click="setTimeTableSort('projectFee')">
+                      Fee{{ getTimeSortIndicator('projectFee') }}
+                    </button>
+                  </th>
+                  <th v-if="shouldShowTimeMoneyColumns" :aria-sort="getTimeColumnSortState('effectiveHourlyRate')">
+                    <button class="time-sort-button" type="button" @click="setTimeTableSort('effectiveHourlyRate')">
+                      Rate{{ getTimeSortIndicator('effectiveHourlyRate') }}
+                    </button>
+                  </th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -3249,7 +3495,9 @@ watch(hasOpenModal, setBodyScrollLock)
                     </button>
                   </td>
                   <td>
-                    <span class="project-type-pill">{{ getProjectTypeLabel(entry.projectType) }}</span>
+                    <span class="project-type-pill" :class="getProjectTypeClass(entry.projectType)">
+                      {{ getProjectTypeLabel(entry.projectType) }}
+                    </span>
                   </td>
                   <td :class="{ 'is-incomplete-cell': !entry.editingStartDate }">
                     {{ formatShortDate(entry.editingStartDate) || 'Missing' }}
@@ -3365,18 +3613,39 @@ watch(hasOpenModal, setBodyScrollLock)
               </label>
             </div>
             <div class="time-form-row three">
-              <label>
-                Filming
-                <input v-model.number="timeEntryModalForm.filmingHours" min="0" step="0.25" type="number" />
-              </label>
-              <label>
-                Driving
-                <input v-model.number="timeEntryModalForm.drivingHours" min="0" step="0.25" type="number" />
-              </label>
-              <label>
-                Editing
-                <input v-model.number="timeEntryModalForm.editingHours" min="0" step="0.25" type="number" />
-              </label>
+              <fieldset class="time-duration-field">
+                <legend>Filming</legend>
+                <label>
+                  Hours
+                  <input v-model.number="timeEntryModalDurationForm.filming.hours" min="0" step="1" type="number" />
+                </label>
+                <label>
+                  Minutes
+                  <input v-model.number="timeEntryModalDurationForm.filming.minutes" min="0" max="59" step="1" type="number" />
+                </label>
+              </fieldset>
+              <fieldset class="time-duration-field">
+                <legend>Driving</legend>
+                <label>
+                  Hours
+                  <input v-model.number="timeEntryModalDurationForm.driving.hours" min="0" step="1" type="number" />
+                </label>
+                <label>
+                  Minutes
+                  <input v-model.number="timeEntryModalDurationForm.driving.minutes" min="0" max="59" step="1" type="number" />
+                </label>
+              </fieldset>
+              <fieldset class="time-duration-field">
+                <legend>Editing</legend>
+                <label>
+                  Hours
+                  <input v-model.number="timeEntryModalDurationForm.editing.hours" min="0" step="1" type="number" />
+                </label>
+                <label>
+                  Minutes
+                  <input v-model.number="timeEntryModalDurationForm.editing.minutes" min="0" max="59" step="1" type="number" />
+                </label>
+              </fieldset>
             </div>
             <label v-if="isModalEntryClientProjectBased">
               Project fee

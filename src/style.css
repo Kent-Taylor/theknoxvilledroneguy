@@ -1397,6 +1397,10 @@ h3 {
   border: 1px solid var(--line);
 }
 
+.time-dashboard-controls input[type='search'] {
+  min-width: min(100%, 280px);
+}
+
 .time-export-panel {
   display: flex;
   flex-wrap: wrap;
@@ -1869,6 +1873,28 @@ h3 {
   background: var(--blush);
 }
 
+.time-sort-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 30px;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.time-sort-button:hover,
+.time-sort-button:focus-visible {
+  color: var(--gold);
+  outline: 0;
+}
+
 .time-table td {
   color: var(--ink);
 }
@@ -1905,6 +1931,26 @@ h3 {
   text-transform: uppercase;
   background: var(--blush);
   border: 1px solid rgba(216, 163, 41, 0.34);
+}
+
+.project-type-pill.is-tht {
+  background: #dceffc;
+  border-color: #96c9ec;
+}
+
+.project-type-pill.is-reel {
+  background: #ddf4df;
+  border-color: #9ed8a5;
+}
+
+.project-type-pill.is-long_form {
+  background: #fff0ad;
+  border-color: #e7c54a;
+}
+
+.project-type-pill.is-other {
+  background: #ededed;
+  border-color: #cecece;
 }
 
 .time-table td .project-type-pill {
@@ -1993,6 +2039,32 @@ h3 {
   background: white;
   border: 1px solid var(--line);
   border-radius: 0;
+}
+
+.time-duration-field {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+}
+
+.time-duration-field legend {
+  grid-column: 1 / -1;
+  padding: 0;
+  color: var(--black);
+  font-weight: 700;
+}
+
+.time-duration-field label {
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .confirm-panel p {
