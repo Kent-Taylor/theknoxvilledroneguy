@@ -4134,6 +4134,27 @@ watch(hasOpenModal, setBodyScrollLock)
           and social media platforms. Those services are governed by their own privacy policies.
         </p>
 
+        <h2>Advertising And Cookies</h2>
+        <p>
+          This site may use Google AdSense or similar advertising services. Google and other third-party
+          vendors may use cookies, web beacons, or similar technologies to serve ads, measure ad
+          performance, and help show ads based on a visitor's prior visits to this and other websites.
+        </p>
+        <p>
+          Visitors can learn how Google uses information from sites and apps that use Google services at
+          <a href="https://policies.google.com/technologies/partner-sites" target="_blank" rel="noopener noreferrer">
+            Google's partner sites policy
+          </a>.
+          Visitors can also manage personalized ad settings at
+          <a href="https://adssettings.google.com/" target="_blank" rel="noopener noreferrer">
+            Google Ad Settings
+          </a>.
+        </p>
+        <p>
+          Most browsers allow visitors to block or delete cookies. Some site features or advertising
+          features may not work as intended if cookies are disabled.
+        </p>
+
         <h2>Contact</h2>
         <p>
           Questions about this policy can be sent to
