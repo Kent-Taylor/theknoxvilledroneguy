@@ -166,6 +166,8 @@ const projectTypeOptions = [
   { value: 'other', label: 'Other' },
 ]
 const TIME_ENTRY_TIMER_STORAGE_KEY = 'knoxville-drone-guy-time-entry-timers'
+const ADSENSE_SCRIPT_ID = 'knoxville-drone-guy-adsense'
+const ADSENSE_CLIENT_ID = 'ca-pub-2655194428154886'
 
 const currentPath = ref(window.location.pathname)
 const galleryItems = ref([])
@@ -309,6 +311,7 @@ const page = computed(() => {
 
   return 'home'
 })
+const shouldLoadAdsense = computed(() => page.value === 'home')
 
 const hasOpenModal = computed(() =>
   Boolean(
@@ -1925,6 +1928,26 @@ function setBodyScrollLock(shouldLock) {
   }
 }
 
+function syncAdsenseScript(shouldLoad) {
+  const existingScript = document.getElementById(ADSENSE_SCRIPT_ID)
+
+  if (!shouldLoad) {
+    existingScript?.remove()
+    return
+  }
+
+  if (existingScript) {
+    return
+  }
+
+  const script = document.createElement('script')
+  script.id = ADSENSE_SCRIPT_ID
+  script.async = true
+  script.crossOrigin = 'anonymous'
+  script.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE_CLIENT_ID}`
+  document.head.appendChild(script)
+}
+
 async function startTimeEntryTimer(entry) {
   const timer = getTimeEntryTimer(entry.id)
 
@@ -2528,6 +2551,7 @@ function uploadThumbnail(item, event) {
 
 onMounted(() => {
   normalizeRoute()
+  syncAdsenseScript(shouldLoadAdsense.value)
   loadTimeEntryTimers()
   timeTimerInterval = window.setInterval(() => {
     timeTimerTick.value = Date.now()
@@ -2549,11 +2573,13 @@ onUnmounted(() => {
     window.clearTimeout(timeSaveToastTimeout)
   }
   setBodyScrollLock(false)
+  syncAdsenseScript(false)
   destroyTimeChart()
 })
 
 watch(timeChartSignature, renderTimeChart)
 watch(hasOpenModal, setBodyScrollLock)
+watch(shouldLoadAdsense, syncAdsenseScript, { immediate: true })
 </script>
 
 <template>
