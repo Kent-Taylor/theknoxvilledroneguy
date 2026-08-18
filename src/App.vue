@@ -348,18 +348,24 @@ const timeViewTabs = [
     id: 'projects',
     label: 'Time Tracker',
     description: 'Projects, timers, search, and filters.',
+    icon: '◷',
   },
   {
     id: 'reports',
     label: 'Reports',
     description: 'Graphs, trends, and exports.',
+    icon: '▥',
   },
   {
     id: 'clients',
     label: 'Clients',
     description: 'Client records and billing setup.',
+    icon: '♙',
   },
 ]
+const activeTimeViewMeta = computed(
+  () => timeViewTabs.find((view) => view.id === activeTimeView.value) || timeViewTabs[0],
+)
 const isAllTimeClientsSelected = computed(
   () => selectedTimeClientId.value === ALL_TIME_CLIENTS_ID || !selectedTimeClientId.value,
 )
@@ -3102,6 +3108,10 @@ watch(shouldLoadAdsense, syncAdsenseScript, { immediate: true })
       <section v-else-if="timeTrackerClients.length" class="time-dashboard">
         <div class="time-workspace">
           <aside class="time-section-nav" aria-label="Time tracker sections">
+            <div class="time-portal-brand">
+              <span aria-hidden="true">◔</span>
+              <strong>Portal</strong>
+            </div>
             <button
               v-for="view in timeViewTabs"
               :key="view.id"
@@ -3109,13 +3119,23 @@ watch(shouldLoadAdsense, syncAdsenseScript, { immediate: true })
               :class="{ active: activeTimeView === view.id }"
               @click="selectTimeView(view.id)"
             >
-              <span>{{ view.label }}</span>
-              <small>{{ view.description }}</small>
+              <span class="time-nav-icon" aria-hidden="true">{{ view.icon }}</span>
+              <span class="time-nav-copy">
+                <strong>{{ view.label }}</strong>
+                <small>{{ view.description }}</small>
+              </span>
             </button>
           </aside>
 
           <div class="time-workspace-main">
-        <section v-if="activeTimeView === 'projects' || activeTimeView === 'clients'" class="time-admin-grid">
+        <section class="time-view-header">
+          <div>
+            <h2>{{ activeTimeViewMeta.label }}</h2>
+            <p>{{ activeTimeViewMeta.description }}</p>
+          </div>
+        </section>
+
+        <section v-if="activeTimeView === 'projects'" class="time-admin-grid">
           <article v-if="activeTimeView === 'clients'" class="time-admin-panel time-admin-launch-card">
             <div class="time-panel-header">
               <div>
@@ -3390,6 +3410,9 @@ watch(shouldLoadAdsense, syncAdsenseScript, { immediate: true })
               <option value="project_based">Project based</option>
             </select>
           </label>
+          <button class="primary-action compact" type="button" @click="resetTimeClientForm(); isTimeClientModalOpen = true">
+            Add client
+          </button>
         </section>
 
         <section class="time-export-panel" aria-label="Time tracker exports">
@@ -3619,20 +3642,20 @@ watch(shouldLoadAdsense, syncAdsenseScript, { immediate: true })
               </div>
               <div class="time-client-metrics">
                 <span>
+                  <small>Projects</small>
                   <strong>{{ getTimeClientSummary(client).projectCount || 0 }}</strong>
-                  Projects
                 </span>
                 <span>
+                  <small>Hours</small>
                   <strong>{{ formatHours(getTimeClientSummary(client).totalHours) }}</strong>
-                  Hours
                 </span>
                 <span>
+                  <small>Revenue</small>
                   <strong>{{ formatCurrency(getTimeClientSummary(client).totalRevenue) }}</strong>
-                  Revenue
                 </span>
                 <span>
+                  <small>Incomplete</small>
                   <strong>{{ getTimeClientSummary(client).incompleteCount || 0 }}</strong>
-                  Incomplete
                 </span>
               </div>
               <div class="time-client-card-actions">

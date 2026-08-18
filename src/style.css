@@ -1260,68 +1260,143 @@ h3 {
 .time-dashboard {
   display: grid;
   gap: 28px;
-  width: min(1160px, calc(100% - 32px));
+  width: min(1480px, calc(100% - 32px));
   margin: 0 auto;
 }
 
 .time-workspace {
   display: grid;
-  grid-template-columns: 230px minmax(0, 1fr);
-  gap: 22px;
+  grid-template-columns: 248px minmax(0, 1fr);
+  gap: 0;
   align-items: start;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(3, 3, 3, 0.06);
+  box-shadow: 0 22px 48px rgba(83, 54, 62, 0.08);
 }
 
 .time-workspace-main {
   display: grid;
   min-width: 0;
   gap: 22px;
+  padding: clamp(22px, 3vw, 42px);
+  background:
+    radial-gradient(circle at 38% 4%, rgba(216, 163, 41, 0.08), transparent 30%),
+    var(--paper);
 }
 
 .time-section-nav {
   position: sticky;
-  top: 96px;
+  top: 0;
   display: grid;
-  gap: 10px;
+  align-content: start;
+  min-height: calc(100svh - 32px);
+  padding: 28px 10px;
+  color: white;
+  background:
+    linear-gradient(145deg, rgba(216, 163, 41, 0.12), transparent 28%),
+    linear-gradient(180deg, #191919, #111);
 }
 
 .time-section-nav button {
   display: grid;
-  gap: 6px;
-  min-height: 92px;
-  padding: 16px;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-height: 72px;
+  padding: 12px 14px;
   text-align: left;
-  color: var(--heading-color);
-  background: white;
-  border: 1px solid rgba(3, 3, 3, 0.08);
-  box-shadow: 0 14px 34px rgba(83, 54, 62, 0.08);
+  color: rgba(255, 255, 255, 0.84);
+  background: transparent;
+  border: 0;
+  border-left: 3px solid transparent;
+  border-radius: 6px;
+  box-shadow: none;
   cursor: pointer;
 }
 
 .time-section-nav button.active {
-  color: white;
-  background: var(--black);
+  color: var(--gold);
+  background: rgba(255, 255, 255, 0.08);
   border-color: var(--gold);
-  box-shadow: 0 18px 38px rgba(36, 25, 26, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(216, 163, 41, 0.06);
 }
 
-.time-section-nav span {
-  font-weight: 820;
-  letter-spacing: 0.02em;
+.time-portal-brand {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 0 18px 36px;
+  color: var(--gold);
 }
 
-.time-section-nav small {
-  color: var(--muted);
+.time-portal-brand span {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  font-size: 1.45rem;
+}
+
+.time-portal-brand strong {
+  font-size: 1.45rem;
+  font-weight: 760;
+}
+
+.time-nav-icon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  color: inherit;
+  font-size: 1.45rem;
+}
+
+.time-nav-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.time-nav-copy strong {
+  font-weight: 640;
+  letter-spacing: 0;
+}
+
+.time-nav-copy small {
+  color: rgba(255, 255, 255, 0.46);
+  font-size: 0.72rem;
   line-height: 1.4;
 }
 
-.time-section-nav button.active small {
-  color: rgba(255, 255, 255, 0.72);
+.time-section-nav button.active .time-nav-copy small {
+  color: rgba(255, 255, 255, 0.62);
 }
 
 .time-admin-grid {
   display: grid;
   grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.1fr);
   gap: 18px;
+}
+
+.time-view-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 22px;
+}
+
+.time-view-header h2 {
+  margin: 0 0 8px;
+  color: #111418;
+  font-size: clamp(2.1rem, 4vw, 3.25rem);
+  font-weight: 720;
+  letter-spacing: 0;
+}
+
+.time-view-header p {
+  margin: 0;
+  color: var(--muted);
 }
 
 .time-admin-panel {
@@ -1429,11 +1504,11 @@ h3 {
   flex-wrap: wrap;
   gap: 14px;
   align-items: end;
-  justify-content: space-between;
-  padding: 18px;
+  justify-content: flex-start;
+  padding: 0;
   background: white;
-  border: 1px solid rgba(3, 3, 3, 0.08);
-  box-shadow: 0 14px 36px rgba(83, 54, 62, 0.08);
+  border: 0;
+  box-shadow: none;
 }
 
 .time-dashboard-controls label {
@@ -1450,17 +1525,18 @@ h3 {
 .time-dashboard-controls select,
 .time-dashboard-controls input {
   min-height: 46px;
-  padding: 10px 12px;
+  padding: 10px 14px;
   color: var(--ink);
   font: inherit;
   letter-spacing: 0;
   text-transform: none;
   background: var(--paper);
   border: 1px solid var(--line);
+  border-radius: 6px;
 }
 
 .time-dashboard-controls input[type='search'] {
-  min-width: min(100%, 280px);
+  min-width: min(100%, 360px);
 }
 
 .time-export-panel {
@@ -1885,26 +1961,35 @@ h3 {
   overflow: visible;
 }
 
+.time-clients-wrap .time-client-list {
+  padding: 22px;
+}
+
 .time-client-list {
   display: grid;
-  gap: 12px;
-  padding: 18px;
+  gap: 18px;
+  padding: 0;
 }
 
 .time-client-card {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) minmax(280px, 1.2fr) auto;
-  gap: 18px;
+  grid-template-columns: minmax(300px, 1.1fr) minmax(430px, 1.35fr) minmax(150px, auto);
+  gap: 28px;
   align-items: center;
-  padding: 18px;
-  background: var(--paper);
-  border: 1px solid var(--line);
+  padding: 28px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(213, 195, 162, 0.72);
+  border-radius: 8px;
+  box-shadow: 0 14px 30px rgba(83, 54, 62, 0.06);
 }
 
 .time-client-card-main h3 {
-  margin: 4px 0 8px;
-  color: var(--heading-color);
-  font-size: clamp(1.35rem, 2vw, 1.85rem);
+  margin: 8px 0 12px;
+  color: #181a1f;
+  font-size: clamp(1.7rem, 2.5vw, 2.45rem);
+  font-weight: 720;
+  line-height: 1.08;
+  overflow-wrap: anywhere;
 }
 
 .time-client-card-main p {
@@ -1916,36 +2001,74 @@ h3 {
 .time-client-metrics {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  gap: 14px;
 }
 
 .time-client-metrics span {
   display: grid;
-  gap: 4px;
-  min-height: 74px;
+  gap: 8px;
+  min-height: 106px;
   align-content: center;
-  padding: 10px;
+  padding: 14px 12px;
   text-align: center;
-  color: var(--muted);
-  font-size: 0.68rem;
-  font-weight: 850;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  color: #181a1f;
   background: white;
-  border: 1px solid rgba(3, 3, 3, 0.06);
+  border: 1px solid rgba(213, 195, 162, 0.64);
+  border-radius: 6px;
 }
 
-.time-client-metrics strong {
-  color: var(--heading-color);
-  font-size: 1.05rem;
+.time-client-metrics small {
+  color: #6f6468;
+  font-size: 0.88rem;
+  font-weight: 540;
   letter-spacing: 0;
   text-transform: none;
 }
 
+.time-client-metrics strong {
+  color: #111418;
+  font-size: clamp(1.08rem, 1.35vw, 1.35rem);
+  font-weight: 760;
+  line-height: 1.18;
+  letter-spacing: 0;
+  text-transform: none;
+  overflow-wrap: anywhere;
+}
+
 .time-client-card-actions {
   display: grid;
-  gap: 8px;
+  gap: 0;
   justify-items: stretch;
+  align-self: center;
+  overflow: hidden;
+  min-width: 152px;
+  background: white;
+  border: 1px solid rgba(213, 195, 162, 0.72);
+  border-radius: 6px;
+  box-shadow: 0 10px 24px rgba(83, 54, 62, 0.07);
+}
+
+.time-client-card-actions .compact {
+  width: 100%;
+  min-height: 48px;
+  color: #363036;
+  background: white;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  box-shadow: none;
+}
+
+.time-client-card-actions .compact:first-child {
+  color: #181a1f;
+}
+
+.time-client-card-actions .compact:last-child {
+  border-bottom: 0;
+}
+
+.time-client-card-actions .danger-action {
+  color: #b42318;
+  background: white;
 }
 
 .time-table-heading {
@@ -3508,10 +3631,17 @@ code {
   .time-section-nav {
     position: static;
     grid-template-columns: repeat(3, minmax(0, 1fr));
+    min-height: auto;
+    padding: 12px;
   }
 
   .time-section-nav button {
     min-height: 84px;
+  }
+
+  .time-portal-brand {
+    grid-column: 1 / -1;
+    padding: 4px 8px 8px;
   }
 
   .time-client-card {
@@ -3523,7 +3653,7 @@ code {
   }
 
   .time-client-card-actions {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: 1fr;
   }
 
   .time-admin-panel,
@@ -3758,11 +3888,12 @@ code {
   }
 
   .time-dashboard {
-    width: min(100% - 20px, 1160px);
+    width: min(100% - 20px, 1480px);
   }
 
   .time-section-nav {
     grid-template-columns: 1fr;
+    min-height: auto;
   }
 
   .time-section-nav button {
