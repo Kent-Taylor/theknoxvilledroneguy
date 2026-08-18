@@ -188,7 +188,10 @@ const selectedTimeClientId = ref(ALL_TIME_CLIENTS_ID)
 const selectedTimeMonth = ref('all')
 const selectedTimeStartDate = ref('')
 const selectedTimeEndDate = ref('')
+const activeTimeView = ref('projects')
 const timeProjectSearch = ref('')
+const timeClientSearch = ref('')
+const timeClientBillingFilter = ref('all')
 const timeTableSort = ref({ key: 'editingStartDate', direction: 'desc' })
 const isTimeClientModalOpen = ref(false)
 const isTimeProjectModalOpen = ref(false)
@@ -340,9 +343,60 @@ const selectedAdminItem = computed(() =>
 const visibleGalleryItems = computed(() => galleryItems.value.slice(0, visibleGalleryCount.value))
 const hasMoreGalleryItems = computed(() => visibleGalleryCount.value < galleryItems.value.length)
 const timeTrackerClients = computed(() => timeTracker.value?.clients || [])
+const timeViewTabs = [
+  {
+    id: 'projects',
+    label: 'Time Tracker',
+    description: 'Projects, timers, search, and filters.',
+  },
+  {
+    id: 'reports',
+    label: 'Reports',
+    description: 'Graphs, trends, and exports.',
+  },
+  {
+    id: 'clients',
+    label: 'Clients',
+    description: 'Client records and billing setup.',
+  },
+]
 const isAllTimeClientsSelected = computed(
   () => selectedTimeClientId.value === ALL_TIME_CLIENTS_ID || !selectedTimeClientId.value,
 )
+const filteredTimeClients = computed(() => {
+  const searchTerms = timeClientSearch.value
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+
+  return timeTrackerClients.value.filter((client) => {
+    const billingType = client.billingType || 'recurring_monthly'
+    const matchesBilling =
+      timeClientBillingFilter.value === 'all' || billingType === timeClientBillingFilter.value
+
+    if (!matchesBilling) {
+      return false
+    }
+
+    if (!searchTerms.length) {
+      return true
+    }
+
+    const searchText = [
+      client.name,
+      formatBillingType(billingType),
+      client.monthlyPayment,
+      client.monthlyExpectedHours,
+      client.targetHourlyRate,
+    ]
+      .filter((value) => value !== null && value !== undefined)
+      .join(' ')
+      .toLowerCase()
+
+    return searchTerms.every((term) => searchText.includes(term))
+  })
+})
 const selectedTimeClient = computed(() =>
   isAllTimeClientsSelected.value
     ? null
@@ -638,6 +692,7 @@ const timeChartSignature = computed(() =>
   JSON.stringify({
     tab: activeTimeChartTab.value,
     page: page.value,
+    view: activeTimeView.value,
     clientId: selectedTimeClientId.value || '',
     month: selectedTimeMonth.value,
     startDate: selectedTimeStartDate.value,
@@ -727,6 +782,31 @@ function getProjectTypeColor(value) {
 
 function getProjectTypeClass(value) {
   return `is-${projectTypeOptions.some((type) => type.value === value) ? value : 'other'}`
+}
+
+function formatBillingType(value) {
+  return value === 'project_based' ? 'Project based' : 'Recurring monthly'
+}
+
+function selectTimeView(viewId) {
+  activeTimeView.value = viewId
+
+  if (viewId === 'reports') {
+    nextTick(renderTimeChart)
+  }
+}
+
+function getTimeClientEntries(client) {
+  return allTimeEntries.value.filter((entry) => String(entry.clientId) === String(client.id))
+}
+
+function getTimeClientSummary(client) {
+  return buildTimeDashboardSummary({
+    clients: [client],
+    entries: getTimeClientEntries(client),
+    isAll: false,
+    selectedClient: client,
+  })
 }
 
 function getTimeEntryStatusText(entry) {
@@ -1179,6 +1259,7 @@ async function renderTimeChart() {
 
   if (
     page.value !== 'time-tracker' ||
+    activeTimeView.value !== 'reports' ||
     !timeChartCanvas.value ||
     !activeTimeChart.value ||
     !activeTimeChartHasData.value
@@ -1336,6 +1417,40 @@ function exportProjectsCsv() {
       Rate: entry.effectiveHourlyRate || '',
       Notes: entry.notes,
     })),
+  )
+}
+
+function exportClientsCsv() {
+  downloadCsv(
+    `time-clients_${getExportDateSlug()}.csv`,
+    [
+      'Client',
+      'Billing Type',
+      'Monthly Payment',
+      'Expected Monthly Hours',
+      'Target Hourly Rate',
+      'Projects',
+      'Total Hours',
+      'Revenue',
+      'Average Effective Rate',
+      'Incomplete Entries',
+    ],
+    filteredTimeClients.value.map((client) => {
+      const summary = getTimeClientSummary(client)
+
+      return {
+        Client: client.name,
+        'Billing Type': formatBillingType(client.billingType),
+        'Monthly Payment': client.monthlyPayment || 0,
+        'Expected Monthly Hours': client.monthlyExpectedHours || 0,
+        'Target Hourly Rate': client.targetHourlyRate || 0,
+        Projects: summary.projectCount || 0,
+        'Total Hours': summary.totalHours || 0,
+        Revenue: summary.totalRevenue || 0,
+        'Average Effective Rate': summary.averageEffectiveHourlyRate || '',
+        'Incomplete Entries': summary.incompleteCount || 0,
+      }
+    }),
   )
 }
 
@@ -2985,8 +3100,23 @@ watch(shouldLoadAdsense, syncAdsenseScript, { immediate: true })
       </section>
 
       <section v-else-if="timeTrackerClients.length" class="time-dashboard">
-        <section class="time-admin-grid">
-          <article class="time-admin-panel time-admin-launch-card">
+        <div class="time-workspace">
+          <aside class="time-section-nav" aria-label="Time tracker sections">
+            <button
+              v-for="view in timeViewTabs"
+              :key="view.id"
+              type="button"
+              :class="{ active: activeTimeView === view.id }"
+              @click="selectTimeView(view.id)"
+            >
+              <span>{{ view.label }}</span>
+              <small>{{ view.description }}</small>
+            </button>
+          </aside>
+
+          <div class="time-workspace-main">
+        <section v-if="activeTimeView === 'projects' || activeTimeView === 'clients'" class="time-admin-grid">
+          <article v-if="activeTimeView === 'clients'" class="time-admin-panel time-admin-launch-card">
             <div class="time-panel-header">
               <div>
                 <p class="eyebrow">Clients</p>
@@ -3004,7 +3134,7 @@ watch(shouldLoadAdsense, syncAdsenseScript, { immediate: true })
             </div>
           </article>
 
-          <article class="time-admin-panel time-admin-launch-card">
+          <article v-if="activeTimeView === 'projects'" class="time-admin-panel time-admin-launch-card">
             <div class="time-panel-header">
               <div>
                 <p class="eyebrow">Projects</p>
@@ -3206,7 +3336,7 @@ watch(shouldLoadAdsense, syncAdsenseScript, { immediate: true })
           </form>
         </section>
 
-        <section class="time-dashboard-controls" aria-label="Time tracker filters">
+        <section v-if="activeTimeView !== 'clients'" class="time-dashboard-controls" aria-label="Time tracker filters">
           <label>
             Dashboard
             <select v-model="selectedTimeClientId" @change="handleTimeClientSelectionChange">
@@ -3243,34 +3373,56 @@ watch(shouldLoadAdsense, syncAdsenseScript, { immediate: true })
           </label>
         </section>
 
+        <section v-if="activeTimeView === 'clients'" class="time-dashboard-controls" aria-label="Client filters">
+          <label>
+            Search clients
+            <input
+              v-model="timeClientSearch"
+              type="search"
+              placeholder="Client name or billing type"
+            />
+          </label>
+          <label>
+            Billing type
+            <select v-model="timeClientBillingFilter">
+              <option value="all">All billing types</option>
+              <option value="recurring_monthly">Recurring monthly</option>
+              <option value="project_based">Project based</option>
+            </select>
+          </label>
+        </section>
+
         <section class="time-export-panel" aria-label="Time tracker exports">
           <div>
             <p class="eyebrow">Export</p>
             <h2>{{ getTimeExportRangeLabel() }}</h2>
           </div>
           <div class="time-export-actions">
-            <button class="secondary-action compact" type="button" @click="clearTimeDateRange">
+            <button v-if="activeTimeView !== 'clients'" class="secondary-action compact" type="button" @click="clearTimeDateRange">
               Clear range
             </button>
-            <button class="primary-action compact" type="button" @click="exportActiveChartPdf">
+            <button v-if="activeTimeView === 'reports'" class="primary-action compact" type="button" @click="exportActiveChartPdf">
               Chart PDF
             </button>
-            <button class="secondary-action compact" type="button" @click="exportProjectsCsv">
+            <button v-if="activeTimeView === 'projects'" class="secondary-action compact" type="button" @click="exportProjectsCsv">
               Projects CSV
             </button>
-            <button class="secondary-action compact" type="button" @click="exportLogsCsv">
+            <button v-if="activeTimeView === 'clients'" class="secondary-action compact" type="button" @click="exportClientsCsv">
+              Clients CSV
+            </button>
+            <button v-if="activeTimeView === 'reports'" class="secondary-action compact" type="button" @click="exportLogsCsv">
               Logs CSV
             </button>
-            <button class="secondary-action compact" type="button" @click="exportWeeklyCsv">
+            <button v-if="activeTimeView === 'reports'" class="secondary-action compact" type="button" @click="exportWeeklyCsv">
               Weekly CSV
             </button>
-            <button class="secondary-action compact" type="button" @click="exportMonthlyCsv">
+            <button v-if="activeTimeView === 'reports'" class="secondary-action compact" type="button" @click="exportMonthlyCsv">
               Monthly CSV
             </button>
           </div>
         </section>
 
-        <div class="time-summary-grid">
+        <div v-if="activeTimeView === 'reports'" class="time-summary-grid">
           <article v-if="isAllTimeClientsSelected" class="time-summary-card is-featured">
             <span>All client income</span>
             <strong>{{ formatCurrency(timeTrackerSummary.totalRevenue) }}</strong>
@@ -3325,7 +3477,7 @@ watch(shouldLoadAdsense, syncAdsenseScript, { immediate: true })
           </article>
         </div>
 
-        <section class="time-insight-band">
+        <section v-if="activeTimeView === 'reports'" class="time-insight-band">
           <div>
             <p class="eyebrow">What this means</p>
             <h2>
@@ -3355,7 +3507,7 @@ watch(shouldLoadAdsense, syncAdsenseScript, { immediate: true })
           </p>
         </section>
 
-        <section class="time-chart-card" aria-label="Time tracker charts">
+        <section v-if="activeTimeView === 'reports'" class="time-chart-card" aria-label="Time tracker charts">
           <div class="time-table-heading">
             <div>
               <p class="eyebrow">Charts</p>
@@ -3401,7 +3553,7 @@ watch(shouldLoadAdsense, syncAdsenseScript, { immediate: true })
           <p v-else class="empty-chart-note">No weekly hours logged yet.</p>
         </section>
 
-        <section class="time-months" aria-label="Monthly client hours">
+        <section v-if="activeTimeView === 'reports'" class="time-months" aria-label="Monthly client hours">
           <article
             v-for="month in timeTrackerSummary.months"
             :key="month.key"
@@ -3444,7 +3596,75 @@ watch(shouldLoadAdsense, syncAdsenseScript, { immediate: true })
           </article>
         </section>
 
-        <section class="time-table-wrap" aria-label="Client project entries">
+        <section v-if="activeTimeView === 'clients'" class="time-table-wrap time-clients-wrap" aria-label="Clients">
+          <div class="time-table-heading">
+            <div>
+              <p class="eyebrow">Client records</p>
+              <h2>Clients</h2>
+            </div>
+            <p>Client records stay in the same site database. Use this view to edit billing setup or export a client list.</p>
+          </div>
+          <div class="time-client-list">
+            <article v-for="client in filteredTimeClients" :key="client.id" class="time-client-card">
+              <div class="time-client-card-main">
+                <p class="eyebrow">{{ formatBillingType(client.billingType) }}</p>
+                <h3>{{ client.name }}</h3>
+                <p v-if="client.billingType === 'project_based'">
+                  Project fees are entered on each project.
+                </p>
+                <p v-else>
+                  {{ formatCurrency(client.monthlyPayment) }} per month ·
+                  {{ formatHours(client.monthlyExpectedHours) }} expected monthly
+                </p>
+              </div>
+              <div class="time-client-metrics">
+                <span>
+                  <strong>{{ getTimeClientSummary(client).projectCount || 0 }}</strong>
+                  Projects
+                </span>
+                <span>
+                  <strong>{{ formatHours(getTimeClientSummary(client).totalHours) }}</strong>
+                  Hours
+                </span>
+                <span>
+                  <strong>{{ formatCurrency(getTimeClientSummary(client).totalRevenue) }}</strong>
+                  Revenue
+                </span>
+                <span>
+                  <strong>{{ getTimeClientSummary(client).incompleteCount || 0 }}</strong>
+                  Incomplete
+                </span>
+              </div>
+              <div class="time-client-card-actions">
+                <button
+                  class="secondary-action compact"
+                  type="button"
+                  @click="selectedTimeClientId = client.id; handleTimeClientSelectionChange(); activeTimeView = 'projects'"
+                >
+                  View projects
+                </button>
+                <button
+                  class="secondary-action compact"
+                  type="button"
+                  @click="selectedTimeClientId = client.id; editTimeClient(client); isTimeClientModalOpen = true"
+                >
+                  Edit
+                </button>
+                <button
+                  v-if="timeTrackerClients.length > 1"
+                  class="secondary-action compact danger-action"
+                  type="button"
+                  @click="removeTimeClient(client)"
+                >
+                  Delete
+                </button>
+              </div>
+            </article>
+            <p v-if="!filteredTimeClients.length" class="empty-chart-note">No clients match those filters.</p>
+          </div>
+        </section>
+
+        <section v-if="activeTimeView === 'projects'" class="time-table-wrap" aria-label="Client project entries">
           <div class="time-table-heading">
             <div>
               <p class="eyebrow">Source entries</p>
@@ -3869,6 +4089,8 @@ watch(shouldLoadAdsense, syncAdsenseScript, { immediate: true })
             </div>
           </div>
         </section>
+          </div>
+        </div>
       </section>
 
       <section v-else class="integration-note time-login-note">
