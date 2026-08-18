@@ -3236,18 +3236,21 @@ code {
   margin-top: 22px;
 }
 
-.footer-legal-links button {
+.footer-legal-links button,
+.footer-legal-links a {
   padding: 0;
   color: var(--muted);
   font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0.08em;
+  text-decoration: none;
   text-transform: uppercase;
   background: transparent;
   border: 0;
 }
 
-.footer-legal-links button:hover {
+.footer-legal-links button:hover,
+.footer-legal-links a:hover {
   color: var(--rose);
 }
 

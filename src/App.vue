@@ -159,6 +159,12 @@ const legalLinks = [
   { name: 'Privacy Policy', path: '/privacy-policy' },
   { name: 'Terms of Service', path: '/terms-of-service' },
 ]
+const adminFooterLinks = [
+  {
+    name: 'Profiles',
+    url: 'https://northstar-client-discovery.kredfox4.chatgpt.site/responses',
+  },
+]
 const projectTypeOptions = [
   { value: 'long_form', label: 'Long Form' },
   { value: 'tht', label: 'THT' },
@@ -4273,6 +4279,17 @@ watch(shouldLoadAdsense, syncAdsenseScript, { immediate: true })
       >
         {{ link.name }}
       </button>
+      <template v-if="authStatus.loggedIn">
+        <a
+          v-for="link in adminFooterLinks"
+          :key="link.url"
+          :href="link.url"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {{ link.name }}
+        </a>
+      </template>
     </nav>
     <p class="copyright">© 2024 The Knoxville Drone Guy. All rights reserved.</p>
   </footer>
