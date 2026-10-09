@@ -4083,3 +4083,157 @@ code {
     width: 100%;
   }
 }
+
+/* Portal spacing: keep intrinsic content inside the available workspace. */
+.time-dashboard {
+  width: min(1480px, calc(100% - 48px));
+}
+
+.time-workspace-main > *,
+.time-client-card > *,
+.time-dashboard-controls label,
+.time-form-row > * {
+  min-width: 0;
+}
+
+.time-dashboard-controls {
+  background: transparent;
+}
+
+.time-dashboard-controls label {
+  flex: 1 1 220px;
+}
+
+.time-dashboard-controls input,
+.time-dashboard-controls select {
+  width: 100%;
+  min-width: 0;
+}
+
+.time-dashboard-controls input[type='search'] {
+  min-width: 0;
+}
+
+.time-admin-panel select,
+.time-dashboard-controls select,
+.time-entry-modal-panel select {
+  appearance: none;
+  padding-right: 44px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath d='m4 6 4 4 4-4' fill='none' stroke='%23363036' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 16px center;
+  background-size: 16px;
+}
+
+.time-admin-panel input,
+.time-admin-panel textarea {
+  min-width: 0;
+}
+
+.time-table-heading {
+  flex-wrap: wrap;
+}
+
+.time-table-heading > * {
+  min-width: 0;
+}
+
+.time-client-card {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr) 152px;
+  gap: 24px;
+}
+
+.time-client-metrics strong {
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: normal;
+}
+
+@media (max-width: 1400px) {
+  .time-client-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .time-client-card-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    min-width: 0;
+  }
+
+  .time-client-card-actions .compact {
+    border-bottom: 0;
+  }
+}
+
+@media (max-width: 900px) {
+  .time-workspace-main {
+    padding: 24px;
+  }
+}
+
+@media (max-width: 520px) {
+  .time-dashboard {
+    width: calc(100% - 32px);
+  }
+
+  .time-workspace-main {
+    padding: 20px 16px;
+  }
+
+  .time-clients-wrap .time-client-list,
+  .time-client-card {
+    padding: 16px;
+  }
+
+  .time-client-card {
+    gap: 20px;
+  }
+
+  .time-client-metrics {
+    gap: 10px;
+  }
+
+  .time-client-metrics span {
+    min-height: 88px;
+    padding: 12px 6px;
+  }
+
+  .time-client-metrics strong {
+    font-size: 1rem;
+  }
+
+  .time-client-card-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .time-client-card-actions .compact {
+    border-bottom: 1px solid var(--line);
+  }
+
+  .time-client-card-actions .compact:last-child {
+    border-bottom: 0;
+  }
+}
+
+@media (forced-colors: active) {
+  .time-admin-panel select,
+  .time-dashboard-controls select,
+  .time-entry-modal-panel select {
+    appearance: auto;
+    background-image: none;
+  }
+}
+
+@media (max-width: 520px) {
+  #app:has(.time-tracker-page) .nav-links {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px 16px;
+  }
+
+  #app:has(.time-tracker-page) .brand {
+    min-width: 0;
+  }
+
+  #app:has(.time-tracker-page) .brand strong {
+    overflow-wrap: anywhere;
+  }
+}
