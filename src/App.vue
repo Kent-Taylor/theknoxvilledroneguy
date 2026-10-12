@@ -4536,6 +4536,7 @@ watch(shouldLoadAdsense, syncAdsenseScript, { immediate: true })
         </a>
       </template>
     </nav>
+    <p class="copyright">The Knoxville Drone Guy is operated by GOTCHA FRAMES DRONE SERVICES LLC.</p>
     <p class="copyright">© 2024 The Knoxville Drone Guy. All rights reserved.</p>
   </footer>
 </template>
