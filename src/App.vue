@@ -135,7 +135,7 @@ const featuredStats = [
 ]
 
 const bookingHref =
-  'mailto:theknoxvilledroneguy@gmail.com?subject=Drone%20booking%20request'
+  'mailto:kent@theknoxvilledroneguy.com?subject=Drone%20booking%20request'
 const phoneNumber = '8014277833'
 const socialLinks = [
   {
@@ -4435,7 +4435,7 @@ watch(shouldLoadAdsense, syncAdsenseScript, { immediate: true })
         <h2>Contact</h2>
         <p>
           Questions about this policy can be sent to
-          <a href="mailto:theknoxvilledroneguy@gmail.com">theknoxvilledroneguy@gmail.com</a>.
+          <a href="mailto:kent@theknoxvilledroneguy.com">kent@theknoxvilledroneguy.com</a>.
         </p>
       </article>
     </section>
@@ -4477,7 +4477,7 @@ watch(shouldLoadAdsense, syncAdsenseScript, { immediate: true })
         <h2>Contact</h2>
         <p>
           Questions about these terms can be sent to
-          <a href="mailto:theknoxvilledroneguy@gmail.com">theknoxvilledroneguy@gmail.com</a>.
+          <a href="mailto:kent@theknoxvilledroneguy.com">kent@theknoxvilledroneguy.com</a>.
         </p>
       </article>
     </section>
